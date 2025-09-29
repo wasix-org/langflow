@@ -353,7 +353,7 @@ def run(
             pass  # Starter projects are added during app startup
 
     # Step 6: Launching Langflow
-    if platform.system() == "Windows":
+    if platform.system() == "Windows" or True:
         with progress.step(6):
             import uvicorn
 

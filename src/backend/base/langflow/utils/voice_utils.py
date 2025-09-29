@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 from lfx.log import logger
-from scipy.signal import resample
+# from scipy.signal import resample
 
 SAMPLE_RATE_24K = 24000
 VAD_SAMPLE_RATE_16K = 16000
@@ -27,20 +27,21 @@ def resample_24k_to_16k(frame_24k_bytes):
     Raises:
         ValueError: If the input frame is not exactly 960 bytes
     """
-    if len(frame_24k_bytes) != BYTES_PER_24K_FRAME:
-        msg = f"Expected exactly {BYTES_PER_24K_FRAME} bytes for 24kHz frame, got {len(frame_24k_bytes)}"
-        raise ValueError(msg)
+    raise NotImplementedError("Resampling is not implemented (requires scipy)")
+    # if len(frame_24k_bytes) != BYTES_PER_24K_FRAME:
+    #     msg = f"Expected exactly {BYTES_PER_24K_FRAME} bytes for 24kHz frame, got {len(frame_24k_bytes)}"
+    #     raise ValueError(msg)
 
-    # Convert bytes to numpy array of int16
-    frame_24k = np.frombuffer(frame_24k_bytes, dtype=np.int16)
+    # # Convert bytes to numpy array of int16
+    # frame_24k = np.frombuffer(frame_24k_bytes, dtype=np.int16)
 
-    # Resample from 24kHz to 16kHz (2/3 ratio)
-    # For a 20ms frame, we go from 480 samples to 320 samples
-    frame_16k = resample(frame_24k, int(len(frame_24k) * 2 / 3))
+    # # Resample from 24kHz to 16kHz (2/3 ratio)
+    # # For a 20ms frame, we go from 480 samples to 320 samples
+    # frame_16k = resample(frame_24k, int(len(frame_24k) * 2 / 3))
 
-    # Convert back to int16 and then to bytes
-    frame_16k = frame_16k.astype(np.int16)
-    return frame_16k.tobytes()
+    # # Convert back to int16 and then to bytes
+    # frame_16k = frame_16k.astype(np.int16)
+    # return frame_16k.tobytes()
 
 
 # def resample_24k_to_16k(frame_24k_bytes: bytes) -> bytes:

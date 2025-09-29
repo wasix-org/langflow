@@ -1,7 +1,7 @@
 import json
 from json import JSONDecodeError
 
-import jq
+# import jq
 from json_repair import repair_json
 
 from lfx.custom.custom_component.component import Component
@@ -85,7 +85,8 @@ class ParseJSONDataComponent(Component):
         full_filter_str = json.dumps(to_filter_as_dict)
 
         logger.info("to_filter: ", to_filter)
-
-        results = jq.compile(self.query).input_text(full_filter_str).all()
+        raise NotImplementedError("JQ is not implemented (requires jq)")
+        # results = jq.compile(self.query).input_text(full_filter_str).all()
+        results = []
         logger.info("results: ", results)
         return [Data(data=value) if isinstance(value, dict) else Data(text=str(value)) for value in results]
