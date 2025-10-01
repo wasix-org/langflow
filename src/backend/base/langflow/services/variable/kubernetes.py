@@ -18,8 +18,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from lfx.services.settings.service import SettingsService
-    from sqlmodel import Session
-    from sqlmodel.ext.asyncio.session import AsyncSession
+    from sqlalchemy.orm import Session
 
 
 class KubernetesSecretService(VariableService, Service):
@@ -29,7 +28,7 @@ class KubernetesSecretService(VariableService, Service):
         self.kubernetes_secrets = KubernetesSecretManager()
 
     @override
-    async def initialize_user_variables(self, user_id: UUID | str, session: AsyncSession) -> None:
+    async def initialize_user_variables(self, user_id: UUID | str, session: Session) -> None:
         # Check for environment variables that should be stored in the database
         should_or_should_not = "Should" if self.settings_service.settings.store_environment_variables else "Should not"
         await logger.ainfo(f"{should_or_should_not} store environment variables in the kubernetes.")
@@ -78,7 +77,7 @@ class KubernetesSecretService(VariableService, Service):
         raise ValueError(msg)
 
     @override
-    async def get_variable(self, user_id: UUID | str, name: str, field: str, session: AsyncSession) -> str:
+    async def get_variable(self, user_id: UUID | str, name: str, field: str, session: Session) -> str:
         secret_name = encode_user_id(user_id)
         key, value = await asyncio.to_thread(self.resolve_variable, secret_name, user_id, name)
         if key.startswith(CREDENTIAL_TYPE + "_") and field == "session_id":
@@ -123,7 +122,7 @@ class KubernetesSecretService(VariableService, Service):
         user_id: UUID | str,
         name: str,
         value: str,
-        session: AsyncSession,
+        session: Session,
     ):
         return await asyncio.to_thread(self._update_variable, user_id, name, value)
 
@@ -133,11 +132,11 @@ class KubernetesSecretService(VariableService, Service):
         self.kubernetes_secrets.delete_secret_key(name=secret_name, key=secret_key)
 
     @override
-    async def delete_variable(self, user_id: UUID | str, name: str, session: AsyncSession) -> None:
+    async def delete_variable(self, user_id: UUID | str, name: str, session: Session) -> None:
         await asyncio.to_thread(self._delete_variable, user_id, name)
 
     @override
-    async def delete_variable_by_id(self, user_id: UUID | str, variable_id: UUID | str, session: AsyncSession) -> None:
+    async def delete_variable_by_id(self, user_id: UUID | str, variable_id: UUID | str, session: Session) -> None:
         await self.delete_variable(user_id, str(variable_id), session)
 
     @override
@@ -149,7 +148,7 @@ class KubernetesSecretService(VariableService, Service):
         *,
         default_fields: list[str],
         type_: str,
-        session: AsyncSession,
+        session: Session,
     ) -> Variable:
         secret_name = encode_user_id(user_id)
         secret_key = name
@@ -171,7 +170,7 @@ class KubernetesSecretService(VariableService, Service):
         return Variable.model_validate(variable_base, from_attributes=True, update={"user_id": user_id})
 
     @override
-    async def get_all(self, user_id: UUID | str, session: AsyncSession) -> list[VariableRead]:
+    async def get_all(self, user_id: UUID | str, session: Session) -> list[VariableRead]:
         secret_name = encode_user_id(user_id)
         variables = await asyncio.to_thread(self.kubernetes_secrets.get_secret, name=secret_name)
         if not variables:

@@ -4,7 +4,7 @@ import asyncio
 import re
 import sqlite3
 import time
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,9 +18,9 @@ from sqlalchemy import event, exc, inspect
 from sqlalchemy.dialects import sqlite as dialect_sqlite
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import create_engine
 from sqlmodel import SQLModel, select, text
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import Session
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from langflow.initial_setup.constants import STARTER_FOLDER_NAME
@@ -88,7 +88,7 @@ class DatabaseService(Service):
         driver = url_components[0]
 
         if driver == "sqlite":
-            driver = "sqlite+aiosqlite"
+            driver = "sqlite"
         elif driver in {"postgresql", "postgres"}:
             if driver == "postgres":
                 logger.warning(
@@ -120,7 +120,7 @@ class DatabaseService(Service):
 
         return connection_kwargs
 
-    def _create_engine(self) -> AsyncEngine:
+    def _create_engine(self) -> Engine:
         # Get connection settings from config, with defaults if not specified
         # if the user specifies an empty dict, we allow it.
         kwargs = self._build_connection_kwargs()
@@ -134,14 +134,14 @@ class DatabaseService(Service):
             else:
                 logger.error(f"Invalid poolclass '{poolclass_key}' specified. Using default pool class.")
 
-        return create_async_engine(
+        return create_engine(
             self.database_url,
             connect_args=self._get_connect_args(),
             **kwargs,
         )
 
     @retry(wait=wait_fixed(2), stop=stop_after_attempt(10))
-    def _create_engine_with_retry(self) -> AsyncEngine:
+    def _create_engine_with_retry(self) -> Engine:
         """Create the engine for the database with retry logic."""
         return self._create_engine()
 
@@ -162,7 +162,8 @@ class DatabaseService(Service):
         return {}
 
     def on_connection(self, dbapi_connection, _connection_record) -> None:
-        if isinstance(dbapi_connection, sqlite3.Connection | dialect_sqlite.aiosqlite.AsyncAdapt_aiosqlite_connection):
+        # Only handle sqlite native connections in sync mode
+        if isinstance(dbapi_connection, sqlite3.Connection):
             pragmas: dict = self.settings_service.settings.sqlite_pragmas or {}
             pragmas_list = []
             for key, val in pragmas.items():
@@ -183,28 +184,28 @@ class DatabaseService(Service):
                 finally:
                     cursor.close()
 
-    @asynccontextmanager
-    async def with_session(self):
+    @contextmanager
+    def with_session(self):
         if self.settings_service.settings.use_noop_database:
+            # Provide a sync-compatible NoopSession
             yield NoopSession()
         else:
-            async with AsyncSession(self.engine, expire_on_commit=False) as session:
-                # Start of Selection
+            with Session(self.engine, expire_on_commit=False) as session:
                 try:
                     yield session
                 except exc.SQLAlchemyError as db_exc:
-                    await logger.aerror(f"Database error during session scope: {db_exc}")
-                    await session.rollback()
+                    logger.error(f"Database error during session scope: {db_exc}")
+                    session.rollback()
                     raise
 
-    async def assign_orphaned_flows_to_superuser(self) -> None:
+    def assign_orphaned_flows_to_superuser(self) -> None:
         """Assign orphaned flows to the default superuser when auto login is enabled."""
         settings_service = get_settings_service()
 
         if not settings_service.auth_settings.AUTO_LOGIN:
             return
 
-        async with self.with_session() as session:
+        with self.with_session() as session:
             # Fetch orphaned flows
             stmt = (
                 select(models.Flow)
@@ -214,25 +215,25 @@ class DatabaseService(Service):
                     models.Folder.name != STARTER_FOLDER_NAME,
                 )
             )
-            orphaned_flows = (await session.exec(stmt)).all()
+            orphaned_flows = (session.exec(stmt)).all()
 
             if not orphaned_flows:
                 return
 
-            await logger.adebug("Assigning orphaned flows to the default superuser")
+            logger.debug("Assigning orphaned flows to the default superuser")
 
             # Retrieve superuser
             superuser_username = settings_service.auth_settings.SUPERUSER
-            superuser = await get_user_by_username(session, superuser_username)
+            superuser = get_user_by_username(session, superuser_username)
 
             if not superuser:
                 error_message = "Default superuser not found"
-                await logger.aerror(error_message)
+                logger.error(error_message)
                 raise RuntimeError(error_message)
 
             # Get existing flow names for the superuser
             existing_names: set[str] = set(
-                (await session.exec(select(models.Flow.name).where(models.Flow.user_id == superuser.id))).all()
+                (session.exec(select(models.Flow.name).where(models.Flow.user_id == superuser.id))).all()
             )
 
             # Process orphaned flows
@@ -243,8 +244,8 @@ class DatabaseService(Service):
                 session.add(flow)
 
             # Commit changes
-            await session.commit()
-            await logger.adebug("Successfully assigned orphaned flows to the default superuser")
+            session.commit()
+            logger.debug("Successfully assigned orphaned flows to the default superuser")
 
     @staticmethod
     def _generate_unique_flow_name(original_name: str, existing_names: set[str]) -> str:
@@ -306,9 +307,9 @@ class DatabaseService(Service):
 
         return True
 
-    async def check_schema_health(self) -> None:
-        async with self.with_session() as session, session.bind.connect() as conn:
-            await conn.run_sync(self._check_schema_health)
+    def check_schema_health(self) -> None:
+        with self.with_session() as session, session.bind.connect() as conn:
+            self._check_schema_health(conn)
 
     @staticmethod
     def init_alembic(alembic_cfg) -> None:
@@ -364,17 +365,18 @@ class DatabaseService(Service):
             if fix:
                 self.try_downgrade_upgrade_until_success(alembic_cfg)
 
-    async def run_migrations(self, *, fix=False) -> None:
+    def run_migrations(self, *, fix=False) -> None:
         should_initialize_alembic = False
-        async with self.with_session() as session:
+        with self.with_session() as session:
             # If the table does not exist it throws an error
             # so we need to catch it
             try:
-                await session.exec(text("SELECT * FROM alembic_version"))
+                session.exec(text("SELECT * FROM alembic_version"))
             except Exception:  # noqa: BLE001
-                await logger.adebug("Alembic not initialized")
+                logger.debug("Alembic not initialized")
                 should_initialize_alembic = True
-        await asyncio.to_thread(self._run_migrations, should_initialize_alembic, fix)
+        # Run migrations synchronously now
+        self._run_migrations(should_initialize_alembic, fix)
 
     @staticmethod
     def try_downgrade_upgrade_until_success(alembic_cfg, retries=5) -> None:
@@ -392,7 +394,7 @@ class DatabaseService(Service):
                 time.sleep(3)
                 command.upgrade(alembic_cfg, "head")
 
-    async def run_migrations_test(self):
+    def run_migrations_test(self):
         # This method is used for testing purposes only
         # We will check that all models are in the database
         # and that the database is up to date with all columns
@@ -400,9 +402,9 @@ class DatabaseService(Service):
         sql_models = [
             model for model in models.__dict__.values() if isinstance(model, type) and issubclass(model, SQLModel)
         ]
-        async with self.with_session() as session, session.bind.connect() as conn:
+        with self.with_session() as session, session.bind.connect() as conn:
             return [
-                TableResults(sql_model.__tablename__, await conn.run_sync(self.check_table, sql_model))
+                TableResults(sql_model.__tablename__, self.check_table(conn, sql_model))
                 for sql_model in sql_models
             ]
 
@@ -465,21 +467,21 @@ class DatabaseService(Service):
         logger.debug("Database and tables created successfully")
 
     @retry(wait=wait_fixed(2), stop=stop_after_attempt(10))
-    async def create_db_and_tables_with_retry(self) -> None:
-        await self.create_db_and_tables()
+    def create_db_and_tables_with_retry(self) -> None:
+        self.create_db_and_tables()
 
-    async def create_db_and_tables(self) -> None:
-        async with self.with_session() as session, session.bind.connect() as conn:
-            await conn.run_sync(self._create_db_and_tables)
+    def create_db_and_tables(self) -> None:
+        with self.with_session() as session, session.bind.connect() as conn:
+            self._create_db_and_tables(conn)
 
-    async def teardown(self) -> None:
-        await logger.adebug("Tearing down database")
+    def teardown(self) -> None:
+        logger.debug("Tearing down database")
         try:
             settings_service = get_settings_service()
             # remove the default superuser if auto_login is enabled
             # using the SUPERUSER to get the user
-            async with self.with_session() as session:
-                await teardown_superuser(settings_service, session)
+            with self.with_session() as session:
+                teardown_superuser(settings_service, session)
         except Exception:  # noqa: BLE001
-            await logger.aexception("Error tearing down database")
-        await self.engine.dispose()
+            logger.exception("Error tearing down database")
+        self.engine.dispose()

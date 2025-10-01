@@ -119,7 +119,7 @@ async def get_knowledge_bases(kb_root: Path, user_id: UUID | str) -> list[str]:
         return []
 
     # Get the current user
-    async with session_scope() as db:
+    with session_scope() as db:
         if not user_id:
             msg = "User ID is required for fetching knowledge bases."
             raise ValueError(msg)

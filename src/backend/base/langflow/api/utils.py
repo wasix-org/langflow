@@ -11,7 +11,7 @@ from fastapi_pagination import Params
 from lfx.graph.graph.base import Graph
 from lfx.log.logger import logger
 from sqlalchemy import delete
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.services.auth.utils import get_current_active_user, get_current_active_user_mcp
 from langflow.services.database.models.flow.model import Flow
@@ -35,7 +35,7 @@ MIN_PAGE_SIZE = 1
 
 CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]
 CurrentActiveMCPUser = Annotated[User, Depends(get_current_active_user_mcp)]
-DbSession = Annotated[AsyncSession, Depends(get_session)]
+DbSession = Annotated[Session, Depends(get_session)]
 
 
 class EventDeliveryType(str, Enum):
@@ -151,8 +151,8 @@ def format_elapsed_time(elapsed_time: float) -> str:
 
 
 async def _get_flow_name(flow_id: uuid.UUID) -> str:
-    async with session_scope() as session:
-        flow = await session.get(Flow, flow_id)
+    with session_scope() as session:
+        flow = session.get(Flow, flow_id)
         if flow is None:
             msg = f"Flow {flow_id} not found"
             raise ValueError(msg)
@@ -183,9 +183,9 @@ async def build_graph_from_data(flow_id: uuid.UUID | str, payload: dict, **kwarg
     return graph
 
 
-async def build_graph_from_db_no_cache(flow_id: uuid.UUID, session: AsyncSession, **kwargs):
+async def build_graph_from_db_no_cache(flow_id: uuid.UUID, session: Session, **kwargs):
     """Build and cache the graph."""
-    flow: Flow | None = await session.get(Flow, flow_id)
+    flow: Flow | None = session.get(Flow, flow_id)
     if not flow or not flow.data:
         msg = "Invalid flow ID"
         raise ValueError(msg)
@@ -193,7 +193,7 @@ async def build_graph_from_db_no_cache(flow_id: uuid.UUID, session: AsyncSession
     return await build_graph_from_data(flow_id, flow.data, flow_name=flow.name, **kwargs)
 
 
-async def build_graph_from_db(flow_id: uuid.UUID, session: AsyncSession, chat_service: ChatService, **kwargs):
+async def build_graph_from_db(flow_id: uuid.UUID, session: Session, chat_service: ChatService, **kwargs):
     graph = await build_graph_from_db_no_cache(flow_id=flow_id, session=session, **kwargs)
     await chat_service.set_cache(str(flow_id), graph)
     return graph
@@ -298,16 +298,16 @@ def parse_value(value: Any, input_type: str) -> Any:
     return value
 
 
-async def cascade_delete_flow(session: AsyncSession, flow_id: uuid.UUID) -> None:
+async def cascade_delete_flow(session: Session, flow_id: uuid.UUID) -> None:
     try:
         # TODO: Verify if deleting messages is safe in terms of session id relevance
         # If we delete messages directly, rather than setting flow_id to null,
         # it might cause unexpected behaviors because the session id could still be
         # used elsewhere to search for these messages.
-        await session.exec(delete(MessageTable).where(MessageTable.flow_id == flow_id))
-        await session.exec(delete(TransactionTable).where(TransactionTable.flow_id == flow_id))
-        await session.exec(delete(VertexBuildTable).where(VertexBuildTable.flow_id == flow_id))
-        await session.exec(delete(Flow).where(Flow.id == flow_id))
+        session.exec(delete(MessageTable).where(MessageTable.flow_id == flow_id))
+        session.exec(delete(TransactionTable).where(TransactionTable.flow_id == flow_id))
+        session.exec(delete(VertexBuildTable).where(VertexBuildTable.flow_id == flow_id))
+        session.exec(delete(Flow).where(Flow.id == flow_id))
     except Exception as e:
         msg = f"Unable to cascade delete flow: {flow_id}"
         raise RuntimeError(msg, e) from e
@@ -352,12 +352,12 @@ async def verify_public_flow_and_get_user(flow_id: uuid.UUID, client_id: str | N
         raise HTTPException(status_code=400, detail="No client_id cookie found")
 
     # Check if the flow is public
-    async with session_scope() as session:
+    with session_scope() as session:
         from sqlmodel import select
 
         from langflow.services.database.models.flow.model import AccessTypeEnum, Flow
 
-        flow = (await session.exec(select(Flow).where(Flow.id == flow_id))).first()
+        flow = (session.exec(select(Flow).where(Flow.id == flow_id))).first()
         if not flow or flow.access_type is not AccessTypeEnum.PUBLIC:
             raise HTTPException(status_code=403, detail="Flow is not public")
 

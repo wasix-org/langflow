@@ -54,7 +54,7 @@ async def byte_stream_generator(file_input, chunk_size: int = 8192) -> AsyncGene
 async def fetch_file_object(file_id: uuid.UUID, current_user: CurrentActiveUser, session: DbSession):
     # Fetch the file from the DB
     stmt = select(UserFile).where(UserFile.id == file_id)
-    results = await session.exec(stmt)
+    results = session.exec(stmt)
     file = results.first()
 
     # Check if the file exists
@@ -134,7 +134,7 @@ async def upload_user_file(
             stmt = select(UserFile).where(
                 col(UserFile.name).like(f"{root_filename}%"), UserFile.user_id == current_user.id
             )
-            existing_files = await session.exec(stmt)
+            existing_files = session.exec(stmt)
             files = existing_files.all()  # Fetch all matching records
 
             if files:
@@ -176,8 +176,8 @@ async def upload_user_file(
         )
         session.add(new_file)
 
-        await session.commit()
-        await session.refresh(new_file)
+        session.commit()
+        session.refresh(new_file)
     except Exception as e:
         # Optionally, you could also delete the file from disk if the DB insert fails.
         raise HTTPException(status_code=500, detail=f"Database error: {e}") from e
@@ -194,7 +194,7 @@ async def get_file_by_name(
     try:
         # Fetch from the UserFile table
         stmt = select(UserFile).where(UserFile.user_id == current_user.id).where(UserFile.name == file_name)
-        result = await session.exec(stmt)
+        result = session.exec(stmt)
 
         return result.first() or None
     except Exception as e:
@@ -240,8 +240,8 @@ async def load_sample_files(current_user: CurrentActiveUser, session: DbSession,
 
         session.add(sample_file)
 
-        await session.commit()
-        await session.refresh(sample_file)
+        session.commit()
+        session.refresh(sample_file)
 
 
 @router.get("")
@@ -258,7 +258,7 @@ async def list_files(
         # await load_sample_files(current_user, session, get_storage_service())
         # Fetch from the UserFile table
         stmt = select(UserFile).where(UserFile.user_id == current_user.id)
-        results = await session.exec(stmt)
+        results = session.exec(stmt)
 
         full_list = list(results)
 
@@ -281,7 +281,7 @@ async def delete_files_batch(
     try:
         # Fetch all files from the DB
         stmt = select(UserFile).where(col(UserFile.id).in_(file_ids), col(UserFile.user_id) == current_user.id)
-        results = await session.exec(stmt)
+        results = session.exec(stmt)
         files = results.all()
 
         if not files:
@@ -290,13 +290,13 @@ async def delete_files_batch(
         # Delete all files from the storage service
         for file in files:
             await storage_service.delete_file(flow_id=str(current_user.id), file_name=file.path)
-            await session.delete(file)
+            session.delete(file)
 
         # Delete all files from the database
-        await session.commit()  # Commit deletion
+        session.commit()  # Commit deletion
 
     except Exception as e:
-        await session.rollback()  # Rollback on failure
+        session.rollback()  # Rollback on failure
         raise HTTPException(status_code=500, detail=f"Error deleting files: {e}") from e
 
     return {"message": f"{len(files)} files deleted successfully"}
@@ -313,7 +313,7 @@ async def download_files_batch(
     try:
         # Fetch all files from the DB
         stmt = select(UserFile).where(col(UserFile.id).in_(file_ids), col(UserFile.user_id) == current_user.id)
-        results = await session.exec(stmt)
+        results = session.exec(stmt)
         files = results.all()
 
         if not files:
@@ -465,7 +465,7 @@ async def edit_file_name(
 
         # Update the file name
         file.name = name
-        await session.commit()
+        session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error editing file: {e}") from e
 
@@ -490,8 +490,8 @@ async def delete_file(
         await storage_service.delete_file(flow_id=str(current_user.id), file_name=file_to_delete.path)
 
         # Delete from the database
-        await session.delete(file_to_delete)
-        await session.commit()
+        session.delete(file_to_delete)
+        session.commit()
 
     except HTTPException:
         # Re-raise HTTPException to avoid being caught by the generic exception handler
@@ -514,19 +514,19 @@ async def delete_all_files(
     try:
         # Fetch all files from the DB
         stmt = select(UserFile).where(UserFile.user_id == current_user.id)
-        results = await session.exec(stmt)
+        results = session.exec(stmt)
         files = results.all()
 
         # Delete all files from the storage service
         for file in files:
             await storage_service.delete_file(flow_id=str(current_user.id), file_name=file.path)
-            await session.delete(file)
+            session.delete(file)
 
         # Delete all files from the database
-        await session.commit()  # Commit deletion
+        session.commit()  # Commit deletion
 
     except Exception as e:
-        await session.rollback()  # Rollback on failure
+        session.rollback()  # Rollback on failure
         raise HTTPException(status_code=500, detail=f"Error deleting files: {e}") from e
 
     return {"message": "All files deleted successfully"}

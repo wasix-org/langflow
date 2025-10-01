@@ -180,7 +180,7 @@ class MCPToolsComponent(ComponentWithCache):
                     "This feature requires the full Langflow installation."
                 )
                 raise ImportError(msg) from e
-            async with session_scope() as db:
+            with session_scope() as db:
                 if not self.user_id:
                     msg = "User ID is required for fetching MCP tools."
                     raise ValueError(msg)

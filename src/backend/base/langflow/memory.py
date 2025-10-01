@@ -9,7 +9,7 @@ from lfx.log.logger import logger
 from lfx.utils.async_helpers import run_until_complete
 from sqlalchemy import delete
 from sqlmodel import col, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.schema.message import Message
 from langflow.services.database.models.message.model import MessageRead, MessageTable
@@ -93,9 +93,9 @@ async def aget_messages(
     Returns:
         List[Data]: A list of Data objects representing the retrieved messages.
     """
-    async with session_scope() as session:
+    with session_scope() as session:
         stmt = _get_variable_query(sender, sender_name, session_id, order_by, order, flow_id, limit)
-        messages = await session.exec(stmt)
+        messages = session.exec(stmt)
         return [await Message.create(**d.model_dump()) for d in messages]
 
 
@@ -125,7 +125,7 @@ async def aadd_messages(messages: Message | list[Message], flow_id: str | UUID |
 
     try:
         messages_models = [MessageTable.from_message(msg, flow_id=flow_id) for msg in messages]
-        async with session_scope() as session:
+        with session_scope() as session:
             messages_models = await aadd_messagetables(messages_models, session)
         return [await Message.create(**message.model_dump()) for message in messages_models]
     except Exception as e:
@@ -137,18 +137,18 @@ async def aupdate_messages(messages: Message | list[Message]) -> list[Message]:
     if not isinstance(messages, list):
         messages = [messages]
 
-    async with session_scope() as session:
+    with session_scope() as session:
         updated_messages: list[MessageTable] = []
         for message in messages:
-            msg = await session.get(MessageTable, message.id)
+            msg = session.get(MessageTable, message.id)
             if msg:
                 msg = msg.sqlmodel_update(message.model_dump(exclude_unset=True, exclude_none=True))
                 # Convert flow_id to UUID if it's a string preventing error when saving to database
                 if msg.flow_id and isinstance(msg.flow_id, str):
                     msg.flow_id = UUID(msg.flow_id)
                 session.add(msg)
-                await session.commit()
-                await session.refresh(msg)
+                session.commit()
+                session.refresh(msg)
                 updated_messages.append(msg)
             else:
                 error_message = f"Message with id {message.id} not found"
@@ -157,20 +157,20 @@ async def aupdate_messages(messages: Message | list[Message]) -> list[Message]:
         return [MessageRead.model_validate(message, from_attributes=True) for message in updated_messages]
 
 
-async def aadd_messagetables(messages: list[MessageTable], session: AsyncSession):
+async def aadd_messagetables(messages: list[MessageTable], session: Session):
     try:
         try:
             for message in messages:
                 session.add(message)
-            await session.commit()
+            session.commit()
             # This is a hack.
             # We are doing this because build_public_tmp causes the CancelledError to be raised
             # while build_flow does not.
         except asyncio.CancelledError:
-            await session.rollback()
+            session.rollback()
             return await aadd_messagetables(messages, session)
         for message in messages:
-            await session.refresh(message)
+            session.refresh(message)
     except asyncio.CancelledError as e:
         await logger.aexception(e)
         error_msg = "Operation cancelled"
@@ -206,13 +206,13 @@ async def adelete_messages(session_id: str) -> None:
     Args:
         session_id (str): The session ID associated with the messages to delete.
     """
-    async with session_scope() as session:
+    with session_scope() as session:
         stmt = (
             delete(MessageTable)
             .where(col(MessageTable.session_id) == session_id)
             .execution_options(synchronize_session="fetch")
         )
-        await session.exec(stmt)
+        session.exec(stmt)
 
 
 async def delete_message(id_: str) -> None:
@@ -221,11 +221,11 @@ async def delete_message(id_: str) -> None:
     Args:
         id_ (str): The ID of the message to delete.
     """
-    async with session_scope() as session:
-        message = await session.get(MessageTable, id_)
+    with session_scope() as session:
+        message = session.get(MessageTable, id_)
         if message:
-            await session.delete(message)
-            await session.commit()
+            session.delete(message)
+            session.commit()
 
 
 def store_message(

@@ -6,24 +6,24 @@ from lfx.log.logger import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.services.database.models.user.model import User, UserUpdate
 
 
-async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
+async def get_user_by_username(db: Session, username: str) -> User | None:
     stmt = select(User).where(User.username == username)
-    return (await db.exec(stmt)).first()
+    return (db.exec(stmt)).first()
 
 
-async def get_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
+async def get_user_by_id(db: Session, user_id: UUID) -> User | None:
     if isinstance(user_id, str):
         user_id = UUID(user_id)
     stmt = select(User).where(User.id == user_id)
-    return (await db.exec(stmt)).first()
+    return (db.exec(stmt)).first()
 
 
-async def update_user(user_db: User | None, user: UserUpdate, db: AsyncSession) -> User:
+async def update_user(user_db: User | None, user: UserUpdate, db: Session) -> User:
     if not user_db:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -45,15 +45,15 @@ async def update_user(user_db: User | None, user: UserUpdate, db: AsyncSession) 
     flag_modified(user_db, "updated_at")
 
     try:
-        await db.commit()
+        db.commit()
     except IntegrityError as e:
-        await db.rollback()
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     return user_db
 
 
-async def update_user_last_login_at(user_id: UUID, db: AsyncSession):
+async def update_user_last_login_at(user_id: UUID, db: Session):
     try:
         user_data = UserUpdate(last_login_at=datetime.now(timezone.utc))
         user = await get_user_by_id(db, user_id)
@@ -62,8 +62,8 @@ async def update_user_last_login_at(user_id: UUID, db: AsyncSession):
         await logger.aerror(f"Error updating user last login at: {e!s}")
 
 
-async def get_all_superusers(db: AsyncSession) -> list[User]:
+async def get_all_superusers(db: Session) -> list[User]:
     """Get all superuser accounts from the database."""
     stmt = select(User).where(User.is_superuser == True)  # noqa: E712
-    result = await db.exec(stmt)
+    result = db.exec(stmt)
     return list(result.all())

@@ -9,7 +9,7 @@ async def generate_unique_folder_name(folder_name, user_id, session):
     while True:
         # Check if a project with the given name exists
         existing_folder = (
-            await session.exec(
+            session.exec(
                 select(Folder).where(
                     Folder.name == folder_name,
                     Folder.user_id == user_id,

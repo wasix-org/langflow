@@ -510,7 +510,7 @@ class KnowledgeIngestionComponent(Component):
             return cached_path
 
         # If not cached, compute it
-        async with session_scope() as db:
+        with session_scope() as db:
             if not self.user_id:
                 msg = "User ID is required for fetching knowledge base path."
                 raise ValueError(msg)
@@ -593,7 +593,7 @@ class KnowledgeIngestionComponent(Component):
             raise RuntimeError(msg) from e
 
     async def _get_api_key_variable(self, field_value: dict[str, Any]):
-        async with session_scope() as db:
+        with session_scope() as db:
             if not self.user_id:
                 msg = "User ID is required for fetching global variables."
                 raise ValueError(msg)
@@ -620,7 +620,7 @@ class KnowledgeIngestionComponent(Component):
         """Update build configuration based on provider selection."""
         # Create a new knowledge base
         if field_name == "knowledge_base":
-            async with session_scope() as db:
+            with session_scope() as db:
                 if not self.user_id:
                     msg = "User ID is required for fetching knowledge base list."
                     raise ValueError(msg)

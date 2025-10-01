@@ -13,7 +13,7 @@ from jose import JWTError, jwt
 from lfx.log.logger import logger
 from lfx.services.settings.service import SettingsService
 from sqlalchemy.exc import IntegrityError
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 from starlette.websockets import WebSocket
 
 from langflow.services.database.models.api_key.crud import check_key
@@ -48,7 +48,7 @@ async def api_key_security(
     settings_service = get_settings_service()
     result: ApiKey | User | None
 
-    async with session_scope() as db:
+    with session_scope() as db:
         if settings_service.auth_settings.AUTO_LOGIN:
             # Get the first user
             if not settings_service.auth_settings.SUPERUSER:
@@ -93,7 +93,7 @@ async def ws_api_key_security(
     api_key: str | None,
 ) -> UserRead:
     settings = get_settings_service()
-    async with session_scope() as db:
+    with session_scope() as db:
         if settings.auth_settings.AUTO_LOGIN:
             if not settings.auth_settings.SUPERUSER:
                 # internal server misconfiguration
@@ -144,7 +144,7 @@ async def get_current_user(
     token: Annotated[str, Security(oauth2_login)],
     query_param: Annotated[str, Security(api_key_query)],
     header_param: Annotated[str, Security(api_key_header)],
-    db: Annotated[AsyncSession, Depends(get_session)],
+    db: Annotated[Session, Depends(get_session)],
 ) -> User:
     if token:
         return await get_current_user_by_jwt(token, db)
@@ -160,7 +160,7 @@ async def get_current_user(
 
 async def get_current_user_by_jwt(
     token: str,
-    db: AsyncSession,
+    db: Session,
 ) -> User:
     settings_service = get_settings_service()
 
@@ -221,7 +221,7 @@ async def get_current_user_by_jwt(
 
 async def get_current_user_for_websocket(
     websocket: WebSocket,
-    db: AsyncSession,
+    db: Session,
 ) -> User | UserRead:
     token = websocket.cookies.get("access_token_lf") or websocket.query_params.get("token")
     if token:
@@ -304,7 +304,7 @@ async def get_webhook_user(flow_id: str, request: Request) -> UserRead:
 
     try:
         # Validate API key directly without AUTO_LOGIN fallback
-        async with get_db_service().with_session() as db:
+        with get_db_service().with_session() as db:
             result = await check_key(db, api_key)
             if not result:
                 logger.warning("Invalid API key provided for webhook")
@@ -363,7 +363,7 @@ def create_token(data: dict, expires_delta: timedelta):
 async def create_super_user(
     username: str,
     password: str,
-    db: AsyncSession,
+    db: Session,
 ) -> User:
     super_user = await get_user_by_username(db, username)
 
@@ -392,7 +392,7 @@ async def create_super_user(
     return super_user
 
 
-async def create_user_longterm_token(db: AsyncSession) -> tuple[UUID, dict]:
+async def create_user_longterm_token(db: Session) -> tuple[UUID, dict]:
     settings_service = get_settings_service()
     if not settings_service.auth_settings.AUTO_LOGIN:
         raise HTTPException(
@@ -444,7 +444,7 @@ def get_user_id_from_token(token: str) -> UUID:
         return UUID(int=0)
 
 
-async def create_user_tokens(user_id: UUID, db: AsyncSession, *, update_last_login: bool = False) -> dict:
+async def create_user_tokens(user_id: UUID, db: Session, *, update_last_login: bool = False) -> dict:
     settings_service = get_settings_service()
 
     access_token_expires = timedelta(seconds=settings_service.auth_settings.ACCESS_TOKEN_EXPIRE_SECONDS)
@@ -470,7 +470,7 @@ async def create_user_tokens(user_id: UUID, db: AsyncSession, *, update_last_log
     }
 
 
-async def create_refresh_token(refresh_token: str, db: AsyncSession):
+async def create_refresh_token(refresh_token: str, db: Session):
     settings_service = get_settings_service()
 
     try:
@@ -507,7 +507,7 @@ async def create_refresh_token(refresh_token: str, db: AsyncSession):
         ) from e
 
 
-async def authenticate_user(username: str, password: str, db: AsyncSession) -> User | None:
+async def authenticate_user(username: str, password: str, db: Session) -> User | None:
     user = await get_user_by_username(db, username)
 
     if not user:
@@ -587,7 +587,7 @@ async def get_current_user_mcp(
     token: Annotated[str, Security(oauth2_login)],
     query_param: Annotated[str, Security(api_key_query)],
     header_param: Annotated[str, Security(api_key_header)],
-    db: Annotated[AsyncSession, Depends(get_session)],
+    db: Annotated[Session, Depends(get_session)],
 ) -> User:
     """MCP-specific user authentication that always allows fallback to username lookup.
 

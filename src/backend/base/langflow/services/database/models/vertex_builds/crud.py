@@ -1,14 +1,14 @@
 from uuid import UUID
 
 from sqlmodel import col, delete, func, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.services.database.models.vertex_builds.model import VertexBuildBase, VertexBuildTable
 from langflow.services.deps import get_settings_service
 
 
 async def get_vertex_builds_by_flow_id(
-    db: AsyncSession, flow_id: UUID, limit: int | None = 1000
+    db: Session, flow_id: UUID, limit: int | None = 1000
 ) -> list[VertexBuildTable]:
     """Get the most recent vertex builds for a given flow ID.
 
@@ -17,7 +17,7 @@ async def get_vertex_builds_by_flow_id(
     recent versions.
 
     Args:
-        db (AsyncSession): The database session for executing queries.
+        db (Session): The database session for executing queries.
         flow_id (UUID): The unique identifier of the flow to get builds for. Can be string or UUID.
         limit (int | None, optional): Maximum number of builds to return. Defaults to 1000.
 
@@ -45,12 +45,12 @@ async def get_vertex_builds_by_flow_id(
         .limit(limit)
     )
 
-    builds = await db.exec(stmt)
+    builds = db.exec(stmt)
     return list(builds)
 
 
 async def log_vertex_build(
-    db: AsyncSession,
+    db: Session,
     vertex_build: VertexBuildBase,
     *,
     max_builds_to_keep: int | None = None,
@@ -65,7 +65,7 @@ async def log_vertex_build(
     4. Commits the transaction
 
     Args:
-        db (AsyncSession): The database session for executing queries.
+        db (Session): The database session for executing queries.
         vertex_build (VertexBuildBase): The vertex build data to log.
         max_builds_to_keep (int | None, optional): Maximum number of builds to keep globally.
             If None, uses system settings.
@@ -92,7 +92,7 @@ async def log_vertex_build(
 
         # 1) Insert and flush the new build so queries can see it
         db.add(table)
-        await db.flush()
+        db.flush()
 
         # 2) Delete older builds for this vertex, keeping newest max_per_vertex
         keep_vertex_subq = (
@@ -109,7 +109,7 @@ async def log_vertex_build(
             VertexBuildTable.id == vertex_build.id,
             col(VertexBuildTable.build_id).not_in(keep_vertex_subq),
         )
-        await db.exec(delete_vertex_older)
+        db.exec(delete_vertex_older)
 
         # 3) Delete older builds globally, keeping newest max_global
         keep_global_subq = (
@@ -118,23 +118,23 @@ async def log_vertex_build(
             .limit(max_global)
         )
         delete_global_older = delete(VertexBuildTable).where(col(VertexBuildTable.build_id).not_in(keep_global_subq))
-        await db.exec(delete_global_older)
+        db.exec(delete_global_older)
 
         # 4) Commit transaction
-        await db.commit()
+        db.commit()
 
     except Exception:
-        await db.rollback()
+        db.rollback()
         raise
 
     return table
 
 
-async def delete_vertex_builds_by_flow_id(db: AsyncSession, flow_id: UUID) -> None:
+async def delete_vertex_builds_by_flow_id(db: Session, flow_id: UUID) -> None:
     """Delete all vertex builds associated with a specific flow ID.
 
     Args:
-        db (AsyncSession): The database session for executing queries.
+        db (Session): The database session for executing queries.
         flow_id (UUID): The unique identifier of the flow whose builds should be deleted.
 
     Note:
@@ -142,4 +142,4 @@ async def delete_vertex_builds_by_flow_id(db: AsyncSession, flow_id: UUID) -> No
         The function commits the transaction automatically.
     """
     stmt = delete(VertexBuildTable).where(VertexBuildTable.flow_id == flow_id)
-    await db.exec(stmt)
+    db.exec(stmt)

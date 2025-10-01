@@ -50,7 +50,7 @@ async def astore_message(
     # In lfx, we use the service architecture - this is a simplified implementation
     # that doesn't persist to database but maintains the message in memory
     # Real implementation would require a database service
-    async with session_scope() as session:
+    with session_scope() as session:
         # Since we're using NoopSession by default, this doesn't actually persist
         # but maintains the same interface as langflow.memory
         try:
@@ -66,12 +66,12 @@ async def astore_message(
 
                     message.id = str(uuid.uuid4())
 
-            await session.add(message)
-            await session.commit()
+            session.add(message)
+            session.commit()
             logger.debug(f"Message stored with ID: {message.id}")
         except Exception as e:
             logger.exception(f"Error storing message: {e}")
-            await session.rollback()
+            session.rollback()
             raise
         return [message]
 
@@ -113,7 +113,7 @@ async def aupdate_messages(messages: Message | list[Message]) -> list[Message]:
     if not isinstance(messages, list):
         messages = [messages]
 
-    async with session_scope() as session:
+    with session_scope() as session:
         updated_messages: list[Message] = []
         for message in messages:
             try:
@@ -128,14 +128,14 @@ async def aupdate_messages(messages: Message | list[Message]) -> list[Message]:
                 if message.flow_id and isinstance(message.flow_id, UUID):
                     message.flow_id = str(message.flow_id)
 
-                await session.add(message)
-                await session.commit()
-                await session.refresh(message)
+                session.add(message)
+                session.commit()
+                session.refresh(message)
                 updated_messages.append(message)
                 logger.debug(f"Message updated: {message.id}")
             except Exception as e:
                 logger.exception(f"Error updating message: {e}")
-                await session.rollback()
+                session.rollback()
                 msg = f"Failed to update message: {e}"
                 logger.error(msg)
                 raise ValueError(msg) from e
@@ -149,12 +149,12 @@ async def delete_message(id_: str) -> None:
     Args:
         id_ (str): The ID of the message to delete.
     """
-    async with session_scope() as session:
+    with session_scope() as session:
         try:
             # In a real implementation, this would delete from database
             # For now, this is a no-op since we're using NoopSession
-            await session.delete(id_)
-            await session.commit()
+            session.delete(id_)
+            session.commit()
             logger.debug(f"Message deleted: {id_}")
         except Exception as e:
             logger.exception(f"Error deleting message: {e}")
@@ -184,11 +184,11 @@ async def aget_messages(
     Returns:
         List[Message]: A list of Message objects representing the retrieved messages.
     """
-    async with session_scope() as session:
+    with session_scope() as session:
         try:
             # In a real implementation, this would query the database
             # For now, return empty list since we're using NoopSession
-            result = await session.query()  # This returns [] from NoopSession
+            result = session.query()  # This returns [] from NoopSession
             logger.debug(f"Retrieved {len(result)} messages")
         except Exception as e:  # noqa: BLE001
             logger.exception(f"Error retrieving messages: {e}")
@@ -218,12 +218,12 @@ async def adelete_messages(session_id: str) -> None:
     Args:
         session_id (str): The session ID associated with the messages to delete.
     """
-    async with session_scope() as session:
+    with session_scope() as session:
         try:
             # In a real implementation, this would delete from database
             # For now, this is a no-op since we're using NoopSession
-            await session.delete(session_id)
-            await session.commit()
+            session.delete(session_id)
+            session.commit()
             logger.debug(f"Messages deleted for session: {session_id}")
         except Exception as e:
             logger.exception(f"Error deleting messages: {e}")

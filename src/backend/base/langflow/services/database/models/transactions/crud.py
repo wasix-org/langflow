@@ -2,7 +2,7 @@ from uuid import UUID
 
 from lfx.log.logger import logger
 from sqlmodel import col, delete, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.services.database.models.transactions.model import (
     TransactionBase,
@@ -13,7 +13,7 @@ from langflow.services.deps import get_settings_service
 
 
 async def get_transactions_by_flow_id(
-    db: AsyncSession, flow_id: UUID, limit: int | None = 1000
+    db: Session, flow_id: UUID, limit: int | None = 1000
 ) -> list[TransactionTable]:
     stmt = (
         select(TransactionTable)
@@ -22,11 +22,11 @@ async def get_transactions_by_flow_id(
         .limit(limit)
     )
 
-    transactions = await db.exec(stmt)
+    transactions = db.exec(stmt)
     return list(transactions)
 
 
-async def log_transaction(db: AsyncSession, transaction: TransactionBase) -> TransactionTable | None:
+async def log_transaction(db: Session, transaction: TransactionBase) -> TransactionTable | None:
     """Log a transaction and maintain a maximum number of transactions in the database.
 
     This function logs a new transaction into the database and ensures that the number of transactions
@@ -65,11 +65,11 @@ async def log_transaction(db: AsyncSession, transaction: TransactionBase) -> Tra
 
         # Add new entry and execute delete in same transaction
         db.add(table)
-        await db.exec(delete_older)
-        await db.commit()
+        db.exec(delete_older)
+        db.commit()
 
     except Exception:
-        await db.rollback()
+        db.rollback()
         raise
     return table
 

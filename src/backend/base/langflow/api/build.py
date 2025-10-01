@@ -207,7 +207,7 @@ async def generate_flow_events(
         try:
             flow_id_str = str(flow_id)
             # Create a fresh session for database operations
-            async with session_scope() as fresh_session:
+            with session_scope() as fresh_session:
                 graph = await create_graph(fresh_session, flow_id_str, flow_name)
 
             first_layer = sort_vertices(graph)

@@ -443,7 +443,7 @@ class CustomComponent(BaseComponent):
 
     async def get_variables(self, name: str, field: str):
         """DEPRECATED - This is kept for backward compatibility. Use get_variable instead."""
-        async with session_scope() as session:
+        with session_scope() as session:
             return await self.get_variable(name, field, session)
 
     async def get_variable(self, name: str, field: str, session):
@@ -493,7 +493,7 @@ class CustomComponent(BaseComponent):
             raise ValueError(msg)
         variable_service = get_variable_service()
 
-        async with session_scope() as session:
+        with session_scope() as session:
             return await variable_service.list_variables(user_id=self.user_id, session=session)
 
     def index(self, value: int = 0):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from lfx.log.logger import logger
@@ -101,8 +101,8 @@ def get_tracing_service() -> TracingServiceProtocol | None:
     return get_service(ServiceType.TRACING_SERVICE)
 
 
-@asynccontextmanager
-async def session_scope():
+@contextmanager
+def session_scope():
     """Session scope context manager.
 
     Returns a real session if database service is available, otherwise a NoopSession.
@@ -115,7 +115,7 @@ async def session_scope():
         yield NoopSession()
         return
 
-    async with db_service.with_session() as session:
+    with db_service.with_session() as session:
         yield session
 
 

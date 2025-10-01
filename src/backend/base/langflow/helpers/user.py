@@ -9,18 +9,18 @@ from langflow.services.deps import session_scope
 
 
 async def get_user_by_flow_id_or_endpoint_name(flow_id_or_name: str) -> UserRead | None:
-    async with session_scope() as session:
+    with session_scope() as session:
         try:
             flow_id = UUID(flow_id_or_name)
-            flow = await session.get(Flow, flow_id)
+            flow = session.get(Flow, flow_id)
         except ValueError:
             stmt = select(Flow).where(Flow.endpoint_name == flow_id_or_name)
-            flow = (await session.exec(stmt)).first()
+            flow = (session.exec(stmt)).first()
 
         if flow is None:
             raise HTTPException(status_code=404, detail=f"Flow identifier {flow_id_or_name} not found")
 
-        user = await session.get(User, flow.user_id)
+        user = session.get(User, flow.user_id)
         if user is None:
             raise HTTPException(status_code=404, detail=f"User for flow {flow_id_or_name} not found")
 

@@ -17,9 +17,9 @@ from langflow.services.deps import get_session
 
 async def get_vertices(sio, sid, flow_id, chat_service) -> None:
     try:
-        session = await anext(get_session())
+        session = next(get_session())
         stmt = select(Flow).where(Flow.id == flow_id)
-        flow: Flow = (await session.exec(stmt)).first()
+        flow: Flow = (session.exec(stmt)).first()
         if not flow or not flow.data:
             await sio.emit("error", data="Invalid flow ID", to=sid)
             return

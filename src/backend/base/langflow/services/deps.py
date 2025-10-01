@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from lfx.log.logger import logger
@@ -8,10 +8,10 @@ from lfx.log.logger import logger
 from langflow.services.schema import ServiceType
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import Generator
 
     from lfx.services.settings.service import SettingsService
-    from sqlmodel.ext.asyncio.session import AsyncSession
+    from sqlalchemy.orm import Session
 
     from langflow.services.cache.service import AsyncBaseCacheService, CacheService
     from langflow.services.chat.service import ChatService
@@ -136,40 +136,23 @@ def get_db_service() -> DatabaseService:
     return get_service(ServiceType.DATABASE_SERVICE, DatabaseServiceFactory())
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Retrieves an async session from the database service.
-
-    Yields:
-        AsyncSession: An async session object.
-
-    """
-    async with session_scope() as session:
+def get_session() -> Generator[Session, None, None]:
+    """Retrieves a sync session from the database service."""
+    with session_scope() as session:
         yield session
 
 
-@asynccontextmanager
-async def session_scope() -> AsyncGenerator[AsyncSession, None]:
-    """Context manager for managing an async session scope.
-
-    This context manager is used to manage an async session scope for database operations.
-    It ensures that the session is properly committed if no exceptions occur,
-    and rolled back if an exception is raised.
-
-    Yields:
-        AsyncSession: The async session object.
-
-    Raises:
-        Exception: If an error occurs during the session scope.
-
-    """
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """Context manager for managing a sync session scope."""
     db_service = get_db_service()
-    async with db_service.with_session() as session:
+    with db_service.with_session() as session:
         try:
             yield session
-            await session.commit()
+            session.commit()
         except Exception:
-            await logger.aexception("An error occurred during the session scope.")
-            await session.rollback()
+            logger.exception("An error occurred during the session scope.")
+            session.rollback()
             raise
 
 

@@ -15,10 +15,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from fastapi_pagination import Page, Params
-from fastapi_pagination.ext.sqlmodel import apaginate
+from fastapi_pagination.ext.sqlmodel import paginate
 from lfx.log import logger
 from sqlmodel import and_, col, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.api.utils import CurrentActiveUser, DbSession, cascade_delete_flow, remove_api_keys, validate_is_component
 from langflow.api.v1.schemas import FlowListCreate
@@ -60,7 +60,7 @@ async def _save_flow_to_fs(flow: Flow) -> None:
 
 async def _new_flow(
     *,
-    session: AsyncSession,
+    session: Session,
     flow: FlowCreate,
     user_id: UUID,
 ):
@@ -76,9 +76,9 @@ async def _new_flow(
         # so we need to check if the name is unique with `like` operator
         # if we find a flow with the same name, we add a number to the end of the name
         # based on the highest number found
-        if (await session.exec(select(Flow).where(Flow.name == flow.name).where(Flow.user_id == user_id))).first():
+        if (session.exec(select(Flow).where(Flow.name == flow.name).where(Flow.user_id == user_id))).first():
             flows = (
-                await session.exec(
+                session.exec(
                     select(Flow).where(Flow.name.like(f"{flow.name} (%")).where(Flow.user_id == user_id)  # type: ignore[attr-defined]
                 )
             ).all()
@@ -107,13 +107,13 @@ async def _new_flow(
         if (
             flow.endpoint_name
             and (
-                await session.exec(
+                session.exec(
                     select(Flow).where(Flow.endpoint_name == flow.endpoint_name).where(Flow.user_id == user_id)
                 )
             ).first()
         ):
             flows = (
-                await session.exec(
+                session.exec(
                     select(Flow)
                     .where(Flow.endpoint_name.like(f"{flow.endpoint_name}-%"))  # type: ignore[union-attr]
                     .where(Flow.user_id == user_id)
@@ -134,7 +134,7 @@ async def _new_flow(
         if db_flow.folder_id is None:
             # Make sure flows always have a folder
             default_folder = (
-                await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME, Folder.user_id == user_id))
+                session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME, Folder.user_id == user_id))
             ).first()
             if default_folder:
                 db_flow.folder_id = default_folder.id
@@ -160,8 +160,8 @@ async def create_flow(
 ):
     try:
         db_flow = await _new_flow(session=session, flow=flow, user_id=current_user.id)
-        await session.commit()
-        await session.refresh(db_flow)
+        session.commit()
+        session.refresh(db_flow)
 
         await _save_flow_to_fs(db_flow)
 
@@ -218,10 +218,10 @@ async def read_flows(
     try:
         auth_settings = get_settings_service().auth_settings
 
-        default_folder = (await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
+        default_folder = (session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
         default_folder_id = default_folder.id if default_folder else None
 
-        starter_folder = (await session.exec(select(Folder).where(Folder.name == STARTER_FOLDER_NAME))).first()
+        starter_folder = (session.exec(select(Folder).where(Folder.name == STARTER_FOLDER_NAME))).first()
         starter_folder_id = starter_folder.id if starter_folder else None
 
         if not starter_folder and not default_folder:
@@ -247,7 +247,7 @@ async def read_flows(
             stmt = stmt.where(Flow.is_component == True)  # noqa: E712
 
         if get_all:
-            flows = (await session.exec(stmt)).all()
+            flows = (session.exec(stmt)).all()
             flows = validate_is_component(flows)
             if components_only:
                 flows = [flow for flow in flows if flow.is_component]
@@ -269,21 +269,21 @@ async def read_flows(
             warnings.filterwarnings(
                 "ignore", category=DeprecationWarning, module=r"fastapi_pagination\.ext\.sqlalchemy"
             )
-            return await apaginate(session, stmt, params=params)
+            return paginate(session, stmt, params=params)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 async def _read_flow(
-    session: AsyncSession,
+    session: Session,
     flow_id: UUID,
     user_id: UUID,
 ):
     """Read a flow."""
     stmt = select(Flow).where(Flow.id == flow_id).where(Flow.user_id == user_id)
 
-    return (await session.exec(stmt)).first()
+    return (session.exec(stmt)).first()
 
 
 @router.get("/{flow_id}", response_model=FlowRead, status_code=200)
@@ -306,7 +306,7 @@ async def read_public_flow(
     flow_id: UUID,
 ):
     """Read a public flow."""
-    access_type = (await session.exec(select(Flow.access_type).where(Flow.id == flow_id))).first()
+    access_type = (session.exec(select(Flow.access_type).where(Flow.id == flow_id))).first()
     if access_type is not AccessTypeEnum.PUBLIC:
         raise HTTPException(status_code=403, detail="Flow is not public")
 
@@ -353,13 +353,13 @@ async def update_flow(
         db_flow.updated_at = datetime.now(timezone.utc)
 
         if db_flow.folder_id is None:
-            default_folder = (await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
+            default_folder = (session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
             if default_folder:
                 db_flow.folder_id = default_folder.id
 
         session.add(db_flow)
-        await session.commit()
-        await session.refresh(db_flow)
+        session.commit()
+        session.refresh(db_flow)
 
         await _save_flow_to_fs(db_flow)
 
@@ -398,7 +398,7 @@ async def delete_flow(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     await cascade_delete_flow(session, flow.id)
-    await session.commit()
+    session.commit()
     return {"message": "Flow deleted successfully"}
 
 
@@ -416,9 +416,9 @@ async def create_flows(
         db_flow = Flow.model_validate(flow, from_attributes=True)
         session.add(db_flow)
         db_flows.append(db_flow)
-    await session.commit()
+    session.commit()
     for db_flow in db_flows:
-        await session.refresh(db_flow)
+        session.refresh(db_flow)
     return db_flows
 
 
@@ -444,9 +444,9 @@ async def upload_file(
         response_list.append(response)
 
     try:
-        await session.commit()
+        session.commit()
         for db_flow in response_list:
-            await session.refresh(db_flow)
+            session.refresh(db_flow)
             await _save_flow_to_fs(db_flow)
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
@@ -486,12 +486,12 @@ async def delete_multiple_flows(
     """
     try:
         flows_to_delete = (
-            await db.exec(select(Flow).where(col(Flow.id).in_(flow_ids)).where(Flow.user_id == user.id))
+            db.exec(select(Flow).where(col(Flow.id).in_(flow_ids)).where(Flow.user_id == user.id))
         ).all()
         for flow in flows_to_delete:
             await cascade_delete_flow(db, flow.id)
 
-        await db.commit()
+        db.commit()
         return {"deleted": len(flows_to_delete)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -504,7 +504,7 @@ async def download_multiple_file(
     db: DbSession,
 ):
     """Download all flows as a zip file."""
-    flows = (await db.exec(select(Flow).where(and_(Flow.user_id == user.id, Flow.id.in_(flow_ids))))).all()  # type: ignore[attr-defined]
+    flows = (db.exec(select(Flow).where(and_(Flow.user_id == user.id, Flow.id.in_(flow_ids))))).all()  # type: ignore[attr-defined]
 
     if not flows:
         raise HTTPException(status_code=404, detail="No flows found.")
@@ -561,13 +561,13 @@ async def read_basic_examples(
         if all_starter_folder_flows_response:
             return all_starter_folder_flows_response
         # Get the starter folder
-        starter_folder = (await session.exec(select(Folder).where(Folder.name == STARTER_FOLDER_NAME))).first()
+        starter_folder = (session.exec(select(Folder).where(Folder.name == STARTER_FOLDER_NAME))).first()
 
         if not starter_folder:
             return []
 
         # Get all flows in the starter folder
-        all_starter_folder_flows = (await session.exec(select(Flow).where(Flow.folder_id == starter_folder.id))).all()
+        all_starter_folder_flows = (session.exec(select(Flow).where(Flow.folder_id == starter_folder.id))).all()
 
         flow_reads = [FlowRead.model_validate(flow, from_attributes=True) for flow in all_starter_folder_flows]
         all_starter_folder_flows_response = compress_response(flow_reads)

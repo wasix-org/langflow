@@ -33,10 +33,10 @@ async def list_flows(*, user_id: str | None = None) -> list[Data]:
         msg = "Session is invalid"
         raise ValueError(msg)
     try:
-        async with session_scope() as session:
+        with session_scope() as session:
             uuid_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
             stmt = select(Flow).where(Flow.user_id == uuid_user_id).where(Flow.is_component == False)  # noqa: E712
-            flows = (await session.exec(stmt)).all()
+            flows = (session.exec(stmt)).all()
 
             return [flow.to_data() for flow in flows]
     except Exception as e:
@@ -60,8 +60,8 @@ async def load_flow(
             msg = f"Flow {flow_name} not found"
             raise ValueError(msg)
 
-    async with session_scope() as session:
-        graph_data = flow.data if (flow := await session.get(Flow, flow_id)) else None
+    with session_scope() as session:
+        graph_data = flow.data if (flow := session.get(Flow, flow_id)) else None
     if not graph_data:
         msg = f"Flow {flow_id} not found"
         raise ValueError(msg)
@@ -71,10 +71,10 @@ async def load_flow(
 
 
 async def find_flow(flow_name: str, user_id: str) -> str | None:
-    async with session_scope() as session:
+    with session_scope() as session:
         uuid_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
         stmt = select(Flow).where(Flow.name == flow_name).where(Flow.user_id == uuid_user_id)
-        flow = (await session.exec(stmt)).first()
+        flow = (session.exec(stmt)).first()
         return flow.id if flow else None
 
 
@@ -278,18 +278,18 @@ def get_arg_names(inputs: list[Vertex]) -> list[dict[str, str]]:
 
 
 async def get_flow_by_id_or_endpoint_name(flow_id_or_name: str, user_id: str | UUID | None = None) -> FlowRead | None:
-    async with session_scope() as session:
+    with session_scope() as session:
         endpoint_name = None
         try:
             flow_id = UUID(flow_id_or_name)
-            flow = await session.get(Flow, flow_id)
+            flow = session.get(Flow, flow_id)
         except ValueError:
             endpoint_name = flow_id_or_name
             stmt = select(Flow).where(Flow.endpoint_name == endpoint_name)
             if user_id:
                 uuid_user_id = UUID(user_id) if isinstance(user_id, str) else user_id
                 stmt = stmt.where(Flow.user_id == uuid_user_id)
-            flow = (await session.exec(stmt)).first()
+            flow = (session.exec(stmt)).first()
         if flow is None:
             raise HTTPException(status_code=404, detail=f"Flow identifier {flow_id_or_name} not found")
         return FlowRead.model_validate(flow, from_attributes=True)
@@ -301,7 +301,7 @@ async def generate_unique_flow_name(flow_name, user_id, session):
     while True:
         # Check if a flow with the given name exists
         existing_flow = (
-            await session.exec(
+            session.exec(
                 select(Flow).where(
                     Flow.name == flow_name,
                     Flow.user_id == user_id,

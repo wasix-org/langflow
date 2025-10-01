@@ -11,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Re
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from fastapi_pagination import Params
-from fastapi_pagination.ext.sqlmodel import apaginate
+from fastapi_pagination.ext.sqlmodel import paginate
 from lfx.services.mcp_composer.service import MCPComposerService
 from sqlalchemy import or_, update
 from sqlalchemy.orm import selectinload
@@ -59,11 +59,11 @@ async def create_project(
         # if we find a flow with the same name, we add a number to the end of the name
         # based on the highest number found
         if (
-            await session.exec(
+            session.exec(
                 statement=select(Folder).where(Folder.name == new_project.name).where(Folder.user_id == current_user.id)
             )
         ).first():
-            project_results = await session.exec(
+            project_results = session.exec(
                 select(Folder).where(
                     Folder.name.like(f"{new_project.name}%"),  # type: ignore[attr-defined]
                     Folder.user_id == current_user.id,
@@ -89,22 +89,22 @@ async def create_project(
             )
 
         session.add(new_project)
-        await session.commit()
-        await session.refresh(new_project)
+        session.commit()
+        session.refresh(new_project)
 
         if project.components_list:
             update_statement_components = (
                 update(Flow).where(Flow.id.in_(project.components_list)).values(folder_id=new_project.id)  # type: ignore[attr-defined]
             )
-            await session.exec(update_statement_components)
-            await session.commit()
+            session.exec(update_statement_components)
+            session.commit()
 
         if project.flows_list:
             update_statement_flows = (
                 update(Flow).where(Flow.id.in_(project.flows_list)).values(folder_id=new_project.id)  # type: ignore[attr-defined]
             )
-            await session.exec(update_statement_flows)
-            await session.commit()
+            session.exec(update_statement_flows)
+            session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -119,7 +119,7 @@ async def read_projects(
 ):
     try:
         projects = (
-            await session.exec(
+            session.exec(
                 select(Folder).where(
                     or_(Folder.user_id == current_user.id, Folder.user_id == None)  # noqa: E711
                 )
@@ -144,7 +144,7 @@ async def read_project(
 ):
     try:
         project = (
-            await session.exec(
+            session.exec(
                 select(Folder)
                 .options(selectinload(Folder.flows))
                 .where(Folder.id == project_id, Folder.user_id == current_user.id)
@@ -176,7 +176,7 @@ async def read_project(
                 warnings.filterwarnings(
                     "ignore", category=DeprecationWarning, module=r"fastapi_pagination\.ext\.sqlalchemy"
                 )
-                paginated_flows = await apaginate(session, stmt, params=params)
+                paginated_flows = paginate(session, stmt, params=params)
 
             return FolderWithPaginatedFlows(folder=FolderRead.model_validate(project), flows=paginated_flows)
 
@@ -199,7 +199,7 @@ async def update_project(
 ):
     try:
         existing_project = (
-            await session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
+            session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
         ).first()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -207,7 +207,7 @@ async def update_project(
     if not existing_project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    result = await session.exec(
+    result = session.exec(
         select(Flow.id, Flow.is_component).where(Flow.folder_id == existing_project.id, Flow.user_id == current_user.id)
     )
     flows_and_components = result.all()
@@ -241,8 +241,8 @@ async def update_project(
             existing_project.parent_id = project.parent_id
 
         session.add(existing_project)
-        await session.commit()
-        await session.refresh(existing_project)
+        session.commit()
+        session.refresh(existing_project)
 
         # Start MCP Composer if auth changed to OAuth
         if should_start_mcp_composer:
@@ -267,24 +267,24 @@ async def update_project(
 
         concat_project_components = project.components + project.flows
 
-        flows_ids = (await session.exec(select(Flow.id).where(Flow.folder_id == existing_project.id))).all()
+        flows_ids = (session.exec(select(Flow.id).where(Flow.folder_id == existing_project.id))).all()
 
         excluded_flows = list(set(flows_ids) - set(project.flows))
 
-        my_collection_project = (await session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
+        my_collection_project = (session.exec(select(Folder).where(Folder.name == DEFAULT_FOLDER_NAME))).first()
         if my_collection_project:
             update_statement_my_collection = (
                 update(Flow).where(Flow.id.in_(excluded_flows)).values(folder_id=my_collection_project.id)  # type: ignore[attr-defined]
             )
-            await session.exec(update_statement_my_collection)
-            await session.commit()
+            session.exec(update_statement_my_collection)
+            session.commit()
 
         if concat_project_components:
             update_statement_components = (
                 update(Flow).where(Flow.id.in_(concat_project_components)).values(folder_id=existing_project.id)  # type: ignore[attr-defined]
             )
-            await session.exec(update_statement_components)
-            await session.commit()
+            session.exec(update_statement_components)
+            session.commit()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -301,14 +301,14 @@ async def delete_project(
 ):
     try:
         flows = (
-            await session.exec(select(Flow).where(Flow.folder_id == project_id, Flow.user_id == current_user.id))
+            session.exec(select(Flow).where(Flow.folder_id == project_id, Flow.user_id == current_user.id))
         ).all()
         if len(flows) > 0:
             for flow in flows:
                 await cascade_delete_flow(session, flow.id)
 
         project = (
-            await session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
+            session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
         ).first()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -329,8 +329,8 @@ async def delete_project(
             await logger.aerror(f"Failed to stop MCP Composer for deleted project {project_id}: {e}")
 
     try:
-        await session.delete(project)
-        await session.commit()
+        session.delete(project)
+        session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -346,14 +346,14 @@ async def download_file(
     """Download all flows from project as a zip file."""
     try:
         query = select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id)
-        result = await session.exec(query)
+        result = session.exec(query)
         project = result.first()
 
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
         flows_query = select(Flow).where(Flow.folder_id == project_id)
-        flows_result = await session.exec(flows_query)
+        flows_result = session.exec(flows_query)
         flows = [FlowRead.model_validate(flow, from_attributes=True) for flow in flows_result.all()]
 
         if not flows:
@@ -423,8 +423,8 @@ async def upload_file(
         )
 
     session.add(new_project)
-    await session.commit()
-    await session.refresh(new_project)
+    session.commit()
+    session.refresh(new_project)
     del data["folder_name"]
     del data["folder_description"]
 

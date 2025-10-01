@@ -29,7 +29,7 @@ async def get_flow(
     session: DbSession,
 ):
     # AttributeError: 'SelectOfScalar' object has no attribute 'first'
-    flow = await session.get(Flow, flow_id)
+    flow = session.get(Flow, flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     if flow.user_id != current_user.id:

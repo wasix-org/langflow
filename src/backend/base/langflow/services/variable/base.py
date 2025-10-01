@@ -1,7 +1,7 @@
 import abc
 from uuid import UUID
 
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.services.base import Service
 from langflow.services.database.models.variable.model import Variable, VariableRead
@@ -13,7 +13,7 @@ class VariableService(Service):
     name = "variable_service"
 
     @abc.abstractmethod
-    async def initialize_user_variables(self, user_id: UUID | str, session: AsyncSession) -> None:
+    async def initialize_user_variables(self, user_id: UUID | str, session: Session) -> None:
         """Initialize user variables.
 
         Args:
@@ -22,7 +22,7 @@ class VariableService(Service):
         """
 
     @abc.abstractmethod
-    async def get_variable(self, user_id: UUID | str, name: str, field: str, session: AsyncSession) -> str:
+    async def get_variable(self, user_id: UUID | str, name: str, field: str, session: Session) -> str:
         """Async get a variable value.
 
         Args:
@@ -36,7 +36,7 @@ class VariableService(Service):
         """
 
     @abc.abstractmethod
-    async def list_variables(self, user_id: UUID | str, session: AsyncSession) -> list[str | None]:
+    async def list_variables(self, user_id: UUID | str, session: Session) -> list[str | None]:
         """List all variables.
 
         Args:
@@ -48,7 +48,7 @@ class VariableService(Service):
         """
 
     @abc.abstractmethod
-    async def update_variable(self, user_id: UUID | str, name: str, value: str, session: AsyncSession) -> Variable:
+    async def update_variable(self, user_id: UUID | str, name: str, value: str, session: Session) -> Variable:
         """Update a variable.
 
         Args:
@@ -62,7 +62,7 @@ class VariableService(Service):
         """
 
     @abc.abstractmethod
-    async def delete_variable(self, user_id: UUID | str, name: str, session: AsyncSession) -> None:
+    async def delete_variable(self, user_id: UUID | str, name: str, session: Session) -> None:
         """Delete a variable.
 
         Args:
@@ -75,7 +75,7 @@ class VariableService(Service):
         """
 
     @abc.abstractmethod
-    async def delete_variable_by_id(self, user_id: UUID | str, variable_id: UUID, session: AsyncSession) -> None:
+    async def delete_variable_by_id(self, user_id: UUID | str, variable_id: UUID, session: Session) -> None:
         """Delete a variable by ID.
 
         Args:
@@ -93,7 +93,7 @@ class VariableService(Service):
         *,
         default_fields: list[str],
         type_: str,
-        session: AsyncSession,
+        session: Session,
     ) -> Variable:
         """Create a variable.
 
@@ -110,7 +110,7 @@ class VariableService(Service):
         """
 
     @abc.abstractmethod
-    async def get_all(self, user_id: UUID | str, session: AsyncSession) -> list[VariableRead]:
+    async def get_all(self, user_id: UUID | str, session: Session) -> list[VariableRead]:
         """Get all variables.
 
         Args:

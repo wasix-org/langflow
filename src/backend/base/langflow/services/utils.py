@@ -21,14 +21,14 @@ from .deps import get_db_service, get_service, get_settings_service, session_sco
 
 if TYPE_CHECKING:
     from lfx.services.settings.manager import SettingsService
-    from sqlmodel.ext.asyncio.session import AsyncSession
+    from sqlalchemy.orm import Session
 
 
-async def get_or_create_super_user(session: AsyncSession, username, password, is_default):
+async def get_or_create_super_user(session: Session, username, password, is_default):
     from langflow.services.database.models.user.model import User
 
     stmt = select(User).where(User.username == username)
-    result = await session.exec(stmt)
+    result = session.exec(stmt)
     user = result.first()
 
     if user and user.is_superuser:
@@ -67,7 +67,7 @@ async def get_or_create_super_user(session: AsyncSession, username, password, is
     return await create_super_user(username, password, db=session)
 
 
-async def setup_superuser(settings_service: SettingsService, session: AsyncSession) -> None:
+async def setup_superuser(settings_service: SettingsService, session: Session) -> None:
     if settings_service.auth_settings.AUTO_LOGIN:
         await logger.adebug("AUTO_LOGIN is set to True. Creating default superuser.")
         username = DEFAULT_SUPERUSER
@@ -101,7 +101,7 @@ async def setup_superuser(settings_service: SettingsService, session: AsyncSessi
         settings_service.auth_settings.reset_credentials()
 
 
-async def teardown_superuser(settings_service, session: AsyncSession) -> None:
+async def teardown_superuser(settings_service, session: Session) -> None:
     """Teardown the superuser."""
     # If AUTO_LOGIN is True, we will remove the default superuser
     # from the database.
@@ -113,25 +113,25 @@ async def teardown_superuser(settings_service, session: AsyncSession) -> None:
             from langflow.services.database.models.user.model import User
 
             stmt = select(User).where(User.username == username)
-            result = await session.exec(stmt)
+            result = session.exec(stmt)
             user = result.first()
             # Check if super was ever logged in, if not delete it
             # if it has logged in, it means the user is using it to login
             if user and user.is_superuser is True and not user.last_login_at:
-                await session.delete(user)
-                await session.commit()
+                session.delete(user)
+                session.commit()
                 await logger.adebug("Default superuser removed successfully.")
 
         except Exception as exc:
             logger.exception(exc)
-            await session.rollback()
+            session.rollback()
             msg = "Could not remove default superuser."
             raise RuntimeError(msg) from exc
 
 
 async def teardown_services() -> None:
     """Teardown all the services."""
-    async with session_scope() as session:
+    with session_scope() as session:
         await teardown_superuser(get_settings_service(), session)
 
     from lfx.services.manager import get_service_manager
@@ -165,7 +165,7 @@ def initialize_session_service() -> None:
     )
 
 
-async def clean_transactions(settings_service: SettingsService, session: AsyncSession) -> None:
+async def clean_transactions(settings_service: SettingsService, session: Session) -> None:
     """Clean up old transactions from the database.
 
     This function deletes transactions that exceed the maximum number to keep (configured in settings).
@@ -185,16 +185,16 @@ async def clean_transactions(settings_service: SettingsService, session: AsyncSe
             )
         )
 
-        await session.exec(delete_stmt)
-        await session.commit()
+        session.exec(delete_stmt)
+        session.commit()
         logger.debug("Successfully cleaned up old transactions")
     except (sqlalchemy_exc.SQLAlchemyError, asyncio.TimeoutError) as exc:
         logger.error(f"Error cleaning up transactions: {exc!s}")
-        await session.rollback()
+        session.rollback()
         # Don't re-raise since this is a cleanup task
 
 
-async def clean_vertex_builds(settings_service: SettingsService, session: AsyncSession) -> None:
+async def clean_vertex_builds(settings_service: SettingsService, session: Session) -> None:
     """Clean up old vertex builds from the database.
 
     This function deletes vertex builds that exceed the maximum number to keep (configured in settings).
@@ -214,12 +214,12 @@ async def clean_vertex_builds(settings_service: SettingsService, session: AsyncS
             )
         )
 
-        await session.exec(delete_stmt)
-        await session.commit()
+        session.exec(delete_stmt)
+        session.commit()
         logger.debug("Successfully cleaned up old vertex builds")
     except (sqlalchemy_exc.SQLAlchemyError, asyncio.TimeoutError) as exc:
         logger.error(f"Error cleaning up vertex builds: {exc!s}")
-        await session.rollback()
+        session.rollback()
         # Don't re-raise since this is a cleanup task
 
 
@@ -282,11 +282,11 @@ async def initialize_services(*, fix_migration: bool = False) -> None:
     await initialize_database(fix_migration=fix_migration)
     db_service = get_db_service()
     await db_service.initialize_alembic_log_file()
-    async with session_scope() as session:
+    with session_scope() as session:
         settings_service = get_service(ServiceType.SETTINGS_SERVICE)
         await setup_superuser(settings_service, session)
     try:
-        await get_db_service().assign_orphaned_flows_to_superuser()
+        get_db_service().assign_orphaned_flows_to_superuser()
     except sqlalchemy_exc.IntegrityError as exc:
         await logger.awarning(f"Error assigning orphaned flows to the superuser: {exc!s}")
     await clean_transactions(settings_service, session)

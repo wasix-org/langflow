@@ -32,7 +32,7 @@ from lfx.utils.util import escape_json_dump
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.initial_setup.constants import STARTER_FOLDER_DESCRIPTION, STARTER_FOLDER_NAME
 from langflow.services.auth.utils import create_super_user
@@ -684,21 +684,21 @@ def create_new_project(
     session.add(db_flow)
 
 
-async def get_all_flows_similar_to_project(session: AsyncSession, folder_id: UUID) -> list[Flow]:
+async def get_all_flows_similar_to_project(session: Session, folder_id: UUID) -> list[Flow]:
     stmt = select(Folder).options(selectinload(Folder.flows)).where(Folder.id == folder_id)
-    return list((await session.exec(stmt)).first().flows)
+    return list((session.exec(stmt)).first().flows)
 
 
 async def delete_starter_projects(session, folder_id) -> None:
     flows = await get_all_flows_similar_to_project(session, folder_id)
     for flow in flows:
-        await session.delete(flow)
-    await session.commit()
+        session.delete(flow)
+    session.commit()
 
 
 async def folder_exists(session, folder_name):
     stmt = select(Folder).where(Folder.name == folder_name)
-    folder = (await session.exec(stmt)).first()
+    folder = (session.exec(stmt)).first()
     return folder is not None
 
 
@@ -707,11 +707,11 @@ async def get_or_create_starter_folder(session):
         new_folder = FolderCreate(name=STARTER_FOLDER_NAME, description=STARTER_FOLDER_DESCRIPTION)
         db_folder = Folder.model_validate(new_folder, from_attributes=True)
         session.add(db_folder)
-        await session.commit()
-        await session.refresh(db_folder)
+        session.commit()
+        session.refresh(db_folder)
         return db_folder
     stmt = select(Folder).where(Folder.name == STARTER_FOLDER_NAME)
-    return (await session.exec(stmt)).first()
+    return (session.exec(stmt)).first()
 
 
 def _is_valid_uuid(val):
@@ -732,12 +732,12 @@ async def load_flows_from_directory() -> None:
     if not flows_path:
         return
 
-    async with session_scope() as session:
+    with session_scope() as session:
         # Find superuser by role instead of username to avoid issues with credential reset
         from langflow.services.database.models.user.model import User
 
         stmt = select(User).where(User.is_superuser == True)  # noqa: E712
-        result = await session.exec(stmt)
+        result = session.exec(stmt)
         user = result.first()
         if user is None:
             msg = "No superuser found in the database"
@@ -794,12 +794,12 @@ async def load_bundles_from_urls() -> tuple[list[TemporaryDirectory], list[str]]
     if not bundle_urls:
         return [], []
 
-    async with session_scope() as session:
+    with session_scope() as session:
         # Find superuser by role instead of username to avoid issues with credential reset
         from langflow.services.database.models.user.model import User
 
         stmt = select(User).where(User.is_superuser == True)  # noqa: E712
-        result = await session.exec(stmt)
+        result = session.exec(stmt)
         user = result.first()
         if user is None:
             msg = "No superuser found in the database"
@@ -832,7 +832,7 @@ async def load_bundles_from_urls() -> tuple[list[TemporaryDirectory], list[str]]
     return temp_dirs, list(component_paths)
 
 
-async def upsert_flow_from_file(file_content: AnyStr, filename: str, session: AsyncSession, user_id: UUID) -> None:
+async def upsert_flow_from_file(file_content: AnyStr, filename: str, session: Session, user_id: UUID) -> None:
     flow = orjson.loads(file_content)
     flow_endpoint_name = flow.get("endpoint_name")
     if _is_valid_uuid(filename):
@@ -887,12 +887,12 @@ async def find_existing_flow(session, flow_id, flow_endpoint_name):
     if flow_endpoint_name:
         await logger.adebug(f"flow_endpoint_name: {flow_endpoint_name}")
         stmt = select(Flow).where(Flow.endpoint_name == flow_endpoint_name)
-        if existing := (await session.exec(stmt)).first():
+        if existing := (session.exec(stmt)).first():
             await logger.adebug(f"Found existing flow by endpoint name: {existing.name}")
             return existing
 
     stmt = select(Flow).where(Flow.id == flow_id)
-    if existing := (await session.exec(stmt)).first():
+    if existing := (session.exec(stmt)).first():
         await logger.adebug(f"Found existing flow by id: {flow_id}")
         return existing
     return None
@@ -910,7 +910,7 @@ async def create_or_update_starter_projects(all_types_dict: dict) -> None:
         # this is intended to be used to skip all startup project logic.
         return
 
-    async with session_scope() as session:
+    with session_scope() as session:
         new_folder = await get_or_create_starter_folder(session)
         starter_projects = await load_starter_projects()
 
@@ -1015,14 +1015,14 @@ async def initialize_auto_login_default_superuser() -> None:
         msg = "SUPERUSER and SUPERUSER_PASSWORD must be set in the settings if AUTO_LOGIN is true."
         raise ValueError(msg)
 
-    async with session_scope() as async_session:
+    with session_scope() as async_session:
         super_user = await create_super_user(db=async_session, username=username, password=password)
         await get_variable_service().initialize_user_variables(super_user.id, async_session)
         _ = await get_or_create_default_folder(async_session, super_user.id)
     await logger.adebug("Super user initialized")
 
 
-async def get_or_create_default_folder(session: AsyncSession, user_id: UUID) -> FolderRead:
+async def get_or_create_default_folder(session: Session, user_id: UUID) -> FolderRead:
     """Ensure the default folder exists for the given user_id. If it doesn't exist, create it.
 
     Uses an idempotent insertion approach to handle concurrent creation gracefully.
@@ -1030,14 +1030,14 @@ async def get_or_create_default_folder(session: AsyncSession, user_id: UUID) -> 
     This implementation avoids an external distributed lock and works with both SQLite and PostgreSQL.
 
     Args:
-        session (AsyncSession): The active database session.
+        session (Session): The active database session.
         user_id (UUID): The ID of the user who owns the folder.
 
     Returns:
         UUID: The ID of the default folder.
     """
     stmt = select(Folder).where(Folder.user_id == user_id, Folder.name == DEFAULT_FOLDER_NAME)
-    result = await session.exec(stmt)
+    result = session.exec(stmt)
     folder = result.first()
     if folder:
         return FolderRead.model_validate(folder, from_attributes=True)
@@ -1045,12 +1045,12 @@ async def get_or_create_default_folder(session: AsyncSession, user_id: UUID) -> 
     try:
         folder_obj = Folder(user_id=user_id, name=DEFAULT_FOLDER_NAME)
         session.add(folder_obj)
-        await session.commit()
-        await session.refresh(folder_obj)
+        session.commit()
+        session.refresh(folder_obj)
     except sa.exc.IntegrityError as e:
         # Another worker may have created the folder concurrently.
-        await session.rollback()
-        result = await session.exec(stmt)
+        session.rollback()
+        result = session.exec(stmt)
         folder = result.first()
         if folder:
             return FolderRead.model_validate(folder, from_attributes=True)
@@ -1065,9 +1065,9 @@ async def sync_flows_from_fs():
     try:
         while True:
             try:
-                async with session_scope() as session:
+                with session_scope() as session:
                     stmt = select(Flow).where(col(Flow.fs_path).is_not(None))
-                    flows = (await session.exec(stmt)).all()
+                    flows = (session.exec(stmt)).all()
                     for flow in flows:
                         mtime = flow_mtimes.setdefault(flow.id, 0)
                         path = anyio.Path(flow.fs_path)
@@ -1082,8 +1082,8 @@ async def sync_flows_from_fs():
                                                 setattr(flow, field_name, new_value)
                                         if folder_id := update_data.get("folder_id"):
                                             flow.folder_id = UUID(folder_id)
-                                        await session.commit()
-                                        await session.refresh(flow)
+                                        session.commit()
+                                        session.refresh(flow)
                                     except Exception:  # noqa: BLE001
                                         await logger.aexception(
                                             f"Couldn't update flow {flow.id} in database from path {path}"

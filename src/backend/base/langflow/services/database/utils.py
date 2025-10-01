@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from alembic.util.exc import CommandError
 from lfx.log.logger import logger
-from sqlmodel import text
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import Session, text
 
 if TYPE_CHECKING:
     from langflow.services.database.service import DatabaseService
@@ -20,9 +19,9 @@ async def initialize_database(*, fix_migration: bool = False) -> None:
     database_service: DatabaseService = get_db_service()
     try:
         if database_service.settings_service.settings.database_connection_retry:
-            await database_service.create_db_and_tables_with_retry()
+            database_service.create_db_and_tables_with_retry()
         else:
-            await database_service.create_db_and_tables()
+            database_service.create_db_and_tables()
     except Exception as exc:
         # if the exception involves tables already existing
         # we can ignore it
@@ -31,13 +30,13 @@ async def initialize_database(*, fix_migration: bool = False) -> None:
             await logger.aexception(msg)
             raise RuntimeError(msg) from exc
     try:
-        await database_service.check_schema_health()
+        database_service.check_schema_health()
     except Exception as exc:
         msg = "Error checking schema health"
         logger.exception(msg)
         raise RuntimeError(msg) from exc
     try:
-        await database_service.run_migrations(fix=fix_migration)
+        database_service.run_migrations(fix=fix_migration)
     except CommandError as exc:
         # if "overlaps with other requested revisions" or "Can't locate revision identified by"
         # are not in the exception, we can't handle it
@@ -49,9 +48,9 @@ async def initialize_database(*, fix_migration: bool = False) -> None:
         # We need to delete the alembic_version table
         # and run the migrations again
         logger.warning("Wrong revision in DB, deleting alembic_version table and running migrations again")
-        async with session_getter(database_service) as session:
-            await session.exec(text("DROP TABLE alembic_version"))
-        await database_service.run_migrations(fix=fix_migration)
+        with session_getter(database_service) as session:
+            session.exec(text("DROP TABLE alembic_version"))
+        database_service.run_migrations(fix=fix_migration)
     except Exception as exc:
         # if the exception involves tables already existing
         # we can ignore it
@@ -61,17 +60,17 @@ async def initialize_database(*, fix_migration: bool = False) -> None:
     await logger.adebug("Database initialized")
 
 
-@asynccontextmanager
-async def session_getter(db_service: DatabaseService):
+@contextmanager
+def session_getter(db_service: DatabaseService):
     try:
-        session = AsyncSession(db_service.engine, expire_on_commit=False)
+        session = Session(db_service.engine, expire_on_commit=False)
         yield session
     except Exception:
-        await logger.aexception("Session rollback because of exception")
-        await session.rollback()
+        logger.exception("Session rollback because of exception")
+        session.rollback()
         raise
     finally:
-        await session.close()
+        session.close()
 
 
 @dataclass

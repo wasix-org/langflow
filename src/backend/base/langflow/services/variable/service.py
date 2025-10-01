@@ -19,14 +19,14 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from lfx.services.settings.service import SettingsService
-    from sqlmodel.ext.asyncio.session import AsyncSession
+    from sqlalchemy.orm import Session
 
 
 class DatabaseVariableService(VariableService, Service):
     def __init__(self, settings_service: SettingsService):
         self.settings_service = settings_service
 
-    async def initialize_user_variables(self, user_id: UUID | str, session: AsyncSession) -> None:
+    async def initialize_user_variables(self, user_id: UUID | str, session: Session) -> None:
         if not self.settings_service.settings.store_environment_variables:
             await logger.adebug("Skipping environment variable storage.")
             return
@@ -35,7 +35,7 @@ class DatabaseVariableService(VariableService, Service):
             if var_name in os.environ and os.environ[var_name].strip():
                 value = os.environ[var_name].strip()
                 query = select(Variable).where(Variable.user_id == user_id, Variable.name == var_name)
-                existing = (await session.exec(query)).first()
+                existing = (session.exec(query)).first()
                 try:
                     if existing:
                         await self.update_variable(user_id, var_name, value, session)
@@ -57,12 +57,12 @@ class DatabaseVariableService(VariableService, Service):
         user_id: UUID | str,
         name: str,
         field: str,
-        session: AsyncSession,
+        session: Session,
     ) -> str:
         # we get the credential from the database
         # credential = session.query(Variable).filter(Variable.user_id == user_id, Variable.name == name).first()
         stmt = select(Variable).where(Variable.user_id == user_id, Variable.name == name)
-        variable = (await session.exec(stmt)).first()
+        variable = (session.exec(stmt)).first()
 
         if not variable or not variable.value:
             msg = f"{name} variable not found."
@@ -78,9 +78,9 @@ class DatabaseVariableService(VariableService, Service):
         # we decrypt the value
         return auth_utils.decrypt_api_key(variable.value, settings_service=self.settings_service)
 
-    async def get_all(self, user_id: UUID | str, session: AsyncSession) -> list[VariableRead]:
+    async def get_all(self, user_id: UUID | str, session: Session) -> list[VariableRead]:
         stmt = select(Variable).where(Variable.user_id == user_id)
-        variables = list((await session.exec(stmt)).all())
+        variables = list((session.exec(stmt)).all())
         # For variables of type 'Generic', attempt to decrypt the value.
         # If decryption fails, assume the value is already plaintext.
         variables_read = []
@@ -99,7 +99,7 @@ class DatabaseVariableService(VariableService, Service):
             variables_read.append(variable_read)
         return variables_read
 
-    async def list_variables(self, user_id: UUID | str, session: AsyncSession) -> list[str | None]:
+    async def list_variables(self, user_id: UUID | str, session: Session) -> list[str | None]:
         variables = await self.get_all(user_id=user_id, session=session)
         return [variable.name for variable in variables if variable]
 
@@ -108,18 +108,18 @@ class DatabaseVariableService(VariableService, Service):
         user_id: UUID | str,
         name: str,
         value: str,
-        session: AsyncSession,
+        session: Session,
     ):
         stmt = select(Variable).where(Variable.user_id == user_id, Variable.name == name)
-        variable = (await session.exec(stmt)).first()
+        variable = (session.exec(stmt)).first()
         if not variable:
             msg = f"{name} variable not found."
             raise ValueError(msg)
         encrypted = auth_utils.encrypt_api_key(value, settings_service=self.settings_service)
         variable.value = encrypted
         session.add(variable)
-        await session.commit()
-        await session.refresh(variable)
+        session.commit()
+        session.refresh(variable)
         return variable
 
     async def update_variable_fields(
@@ -127,10 +127,10 @@ class DatabaseVariableService(VariableService, Service):
         user_id: UUID | str,
         variable_id: UUID | str,
         variable: VariableUpdate,
-        session: AsyncSession,
+        session: Session,
     ):
         query = select(Variable).where(Variable.id == variable_id, Variable.user_id == user_id)
-        db_variable = (await session.exec(query)).one()
+        db_variable = (session.exec(query)).one()
         db_variable.updated_at = datetime.now(timezone.utc)
 
         variable.value = variable.value or ""
@@ -142,8 +142,8 @@ class DatabaseVariableService(VariableService, Service):
             setattr(db_variable, key, value)
 
         session.add(db_variable)
-        await session.commit()
-        await session.refresh(db_variable)
+        session.commit()
+        session.refresh(db_variable)
         return db_variable
 
     @override
@@ -151,25 +151,25 @@ class DatabaseVariableService(VariableService, Service):
         self,
         user_id: UUID | str,
         name: str,
-        session: AsyncSession,
+        session: Session,
     ) -> None:
         stmt = select(Variable).where(Variable.user_id == user_id).where(Variable.name == name)
-        variable = (await session.exec(stmt)).first()
+        variable = (session.exec(stmt)).first()
         if not variable:
             msg = f"{name} variable not found."
             raise ValueError(msg)
-        await session.delete(variable)
-        await session.commit()
+        session.delete(variable)
+        session.commit()
 
     @override
-    async def delete_variable_by_id(self, user_id: UUID | str, variable_id: UUID, session: AsyncSession) -> None:
+    async def delete_variable_by_id(self, user_id: UUID | str, variable_id: UUID, session: Session) -> None:
         stmt = select(Variable).where(Variable.user_id == user_id, Variable.id == variable_id)
-        variable = (await session.exec(stmt)).first()
+        variable = (session.exec(stmt)).first()
         if not variable:
             msg = f"{variable_id} variable not found."
             raise ValueError(msg)
-        await session.delete(variable)
-        await session.commit()
+        session.delete(variable)
+        session.commit()
 
     async def create_variable(
         self,
@@ -179,7 +179,7 @@ class DatabaseVariableService(VariableService, Service):
         *,
         default_fields: Sequence[str] = (),
         type_: str = CREDENTIAL_TYPE,
-        session: AsyncSession,
+        session: Session,
     ):
         variable_base = VariableCreate(
             name=name,
@@ -189,6 +189,6 @@ class DatabaseVariableService(VariableService, Service):
         )
         variable = Variable.model_validate(variable_base, from_attributes=True, update={"user_id": user_id})
         session.add(variable)
-        await session.commit()
-        await session.refresh(variable)
+        session.commit()
+        session.refresh(variable)
         return variable

@@ -165,22 +165,22 @@ class LangflowRunnerExperimental:
         return flow_dict
 
     async def generate_user(self) -> User:
-        async with session_scope() as session:
+        with session_scope() as session:
             user_id = str(uuid4())
             user = User(id=user_id, username=user_id, password=get_password_hash(str(uuid4())), is_active=True)
             session.add(user)
-            await session.commit()
-            await session.refresh(user)
+            session.commit()
+            session.refresh(user)
             return user
 
     @staticmethod
     async def add_flow_to_db(flow_dict: dict, user_id: str | None):
-        async with session_scope() as session:
+        with session_scope() as session:
             flow_db = Flow(
                 name=flow_dict.get("name"), id=UUID(flow_dict["id"]), data=flow_dict.get("data", {}), user_id=user_id
             )
             session.add(flow_db)
-            await session.commit()
+            session.commit()
 
     @staticmethod
     async def run_graph(
@@ -220,20 +220,20 @@ class LangflowRunnerExperimental:
             await cache_service.clear()
         else:
             cache_service.clear()
-        async with session_scope() as session:
+        with session_scope() as session:
             flow_id = flow_dict["id"]
             uuid_obj = flow_id if isinstance(flow_id, UUID) else UUID(str(flow_id))
             await cascade_delete_flow(session, uuid_obj)
 
     @staticmethod
     async def clear_user_state(user_id: str):
-        async with session_scope() as session:
-            flows = await session.exec(select(Flow.id).where(Flow.user_id == user_id))
+        with session_scope() as session:
+            flows = session.exec(select(Flow.id).where(Flow.user_id == user_id))
             flow_ids: list[UUID] = [fid for fid in flows.scalars().all() if fid is not None]
             for flow_id in flow_ids:
                 await cascade_delete_flow(session, flow_id)
-            await session.exec(delete(Variable).where(Variable.user_id == user_id))
-            await session.exec(delete(User).where(User.id == user_id))
+            session.exec(delete(Variable).where(Variable.user_id == user_id))
+            session.exec(delete(User).where(User.id == user_id))
 
     async def init_db_if_needed(self):
         if not await self.database_exists_check() and self.should_initialize_db:
@@ -244,9 +244,9 @@ class LangflowRunnerExperimental:
 
     @staticmethod
     async def database_exists_check():
-        async with session_scope() as session:
+        with session_scope() as session:
             try:
-                result = await session.exec(text("SELECT version_num FROM public.alembic_version"))
+                result = session.exec(text("SELECT version_num FROM public.alembic_version"))
                 return result.first() is not None
             except Exception as e:  # noqa: BLE001
                 await logger.adebug(f"Database check failed: {e}")

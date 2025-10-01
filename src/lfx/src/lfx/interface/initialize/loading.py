@@ -133,7 +133,7 @@ async def update_params_with_load_from_db_fields(
     *,
     fallback_to_env_vars=False,
 ):
-    async with session_scope() as session:
+    with session_scope() as session:
         settings_service = get_settings_service()
         is_noop_session = isinstance(session, NoopSession) or (
             settings_service and settings_service.settings.use_noop_database

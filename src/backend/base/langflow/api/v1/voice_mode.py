@@ -518,9 +518,9 @@ last_sender_by_session: defaultdict[str, str | None] = defaultdict(lambda: None)
 
 
 async def get_flow_desc_from_db(flow_id: str) -> Flow:
-    async with session_scope() as session:
+    with session_scope() as session:
         stmt = select(Flow).where(Flow.id == UUID(flow_id))
-        result = await session.exec(stmt)
+        result = session.exec(stmt)
         flow = result.scalar_one_or_none()
         if not flow:
             msg = f"Flow with id {flow_id} not found"

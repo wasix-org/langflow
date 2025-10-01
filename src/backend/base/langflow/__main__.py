@@ -694,7 +694,7 @@ async def _create_superuser(username: str, password: str, auth_token: str | None
     from langflow.services.database.models.user.crud import get_all_superusers
 
     existing_superusers = []
-    async with session_scope() as session:
+    with session_scope() as session:
         # Note that the default superuser is created by the initialize_services() function,
         # but leaving this check here in case we change that behavior
         existing_superusers = await get_all_superusers(session)
@@ -726,7 +726,7 @@ async def _create_superuser(username: str, password: str, auth_token: str | None
         # Validate the auth token
         try:
             auth_user = None
-            async with session_scope() as session:
+            with session_scope() as session:
                 # Try JWT first
                 user = None
                 try:
@@ -750,7 +750,7 @@ async def _create_superuser(username: str, password: str, auth_token: str | None
             raise typer.Exit(1) from None
 
     # Auth complete, create the superuser
-    async with session_scope() as session:
+    with session_scope() as session:
         from langflow.services.auth.utils import create_super_user
 
         if await create_super_user(db=session, username=username, password=password):
@@ -758,7 +758,7 @@ async def _create_superuser(username: str, password: str, auth_token: str | None
             from langflow.services.database.models.user.model import User
 
             stmt = select(User).where(User.username == username)
-            created_user: User = (await session.exec(stmt)).first()
+            created_user: User = (session.exec(stmt)).first()
             if created_user is None or not created_user.is_superuser:
                 typer.echo("Superuser creation failed.")
                 return
@@ -821,8 +821,8 @@ async def _migration(*, test: bool, fix: bool) -> None:
     await initialize_services(fix_migration=fix)
     db_service = get_db_service()
     if not test:
-        await db_service.run_migrations()
-    results = await db_service.run_migrations_test()
+        db_service.run_migrations()
+    results = db_service.run_migrations_test()
     display_results(results)
 
 
@@ -866,11 +866,11 @@ def api_key(
             typer.echo("Auto login is disabled. API keys cannot be created through the CLI.")
             return None
 
-        async with session_scope() as session:
+        with session_scope() as session:
             from langflow.services.database.models.user.model import User
 
             stmt = select(User).where(User.username == DEFAULT_SUPERUSER)
-            superuser = (await session.exec(stmt)).first()
+            superuser = (session.exec(stmt)).first()
             if not superuser:
                 typer.echo(
                     "Default superuser not found. This command requires a superuser and AUTO_LOGIN to be enabled."
@@ -880,13 +880,13 @@ def api_key(
             from langflow.services.database.models.api_key.model import ApiKey, ApiKeyCreate
 
             stmt = select(ApiKey).where(ApiKey.user_id == superuser.id)
-            api_key = (await session.exec(stmt)).first()
+            api_key = (session.exec(stmt)).first()
             if api_key:
                 await delete_api_key(session, api_key.id)
 
             api_key_create = ApiKeyCreate(name="CLI")
             unmasked_api_key = await create_api_key(session, api_key_create, user_id=superuser.id)
-            await session.commit()
+            session.commit()
             return unmasked_api_key
 
     unmasked_api_key = asyncio.run(aapi_key())

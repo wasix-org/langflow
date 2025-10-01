@@ -165,8 +165,8 @@ async def build_flow(
         Dict with job_id that can be used to poll for build status
     """
     # First verify the flow exists
-    async with session_scope() as session:
-        flow = await session.get(Flow, flow_id)
+    with session_scope() as session:
+        flow = session.get(Flow, flow_id)
         if not flow:
             raise HTTPException(status_code=404, detail=f"Flow with id {flow_id} not found")
 

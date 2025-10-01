@@ -46,7 +46,7 @@ async def health_check(
     try:
         # Check database to query a bogus flow
         stmt = select(Flow).where(Flow.id == uuid.uuid4())
-        (await session.exec(stmt)).first()
+        (session.exec(stmt)).first()
         response.db = "ok"
     except Exception:  # noqa: BLE001
         await logger.aexception("Error checking database")

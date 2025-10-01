@@ -55,7 +55,7 @@ def handle_mcp_errors(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[
 
 async def with_db_session(operation: Callable[[Any], Awaitable[T]]) -> T:
     """Execute an operation within a database session context."""
-    async with session_scope() as session:
+    with session_scope() as session:
         return await operation(session)
 
 
@@ -90,11 +90,11 @@ async def handle_list_resources(project_id=None):
 
         base_url = f"http://{host}:{port}".rstrip("/")
 
-        async with session_scope() as session:
+        with session_scope() as session:
             # Build query based on whether project_id is provided
             flows_query = select(Flow).where(Flow.folder_id == project_id) if project_id else select(Flow)
 
-            flows = (await session.exec(flows_query)).all()
+            flows = (session.exec(flows_query)).all()
 
             for flow in flows:
                 if flow.id:
@@ -292,7 +292,7 @@ async def handle_list_tools(project_id=None, *, mcp_enabled_only=False):
     """
     tools = []
     try:
-        async with session_scope() as session:
+        with session_scope() as session:
             # Build query based on parameters
             if project_id:
                 # Filter flows by project and optionally by MCP enabled status
@@ -303,7 +303,7 @@ async def handle_list_tools(project_id=None, *, mcp_enabled_only=False):
                 # Get all flows
                 flows_query = select(Flow)
 
-            flows = (await session.exec(flows_query)).all()
+            flows = (session.exec(flows_query)).all()
 
             existing_names = set()
             for flow in flows:

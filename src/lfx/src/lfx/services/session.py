@@ -2,62 +2,55 @@
 
 
 class NoopSession:
-    """No-operation session that implements the database session interface.
+    """No-operation session mirroring a synchronous SQLAlchemy/SQLModel session.
 
-    This provides a complete database session API but all operations are no-ops.
-    Perfect for testing or when no real database is available.
+    Methods are implemented as no-ops to allow calling code to run without
+    a real database. Useful for testing or when DB is disabled.
     """
 
     class NoopBind:
         class NoopConnect:
-            async def __aenter__(self):
+            def __enter__(self):
                 return self
 
-            async def __aexit__(self, exc_type, exc, tb):
+            def __exit__(self, exc_type, exc, tb):
                 pass
-
-            async def run_sync(self, fn, *args, **kwargs):  # noqa: ARG002
-                return None
 
         def connect(self):
             return self.NoopConnect()
 
     bind = NoopBind()
 
-    async def add(self, *args, **kwargs):
+    # CRUD-like APIs
+    def add(self, *args, **kwargs):  # noqa: ARG002
         pass
 
-    async def commit(self):
+    def commit(self):
         pass
 
-    async def rollback(self):
+    def rollback(self):
         pass
 
-    async def execute(self, *args, **kwargs):  # noqa: ARG002
+    def execute(self, *args, **kwargs):  # noqa: ARG002
         return None
 
-    async def query(self, *args, **kwargs):  # noqa: ARG002
+    def query(self, *args, **kwargs):  # noqa: ARG002
         return []
 
-    async def close(self):
+    def close(self):
         pass
 
-    async def refresh(self, *args, **kwargs):
+    def refresh(self, *args, **kwargs):  # noqa: ARG002
         pass
 
-    async def delete(self, *args, **kwargs):
+    def delete(self, *args, **kwargs):  # noqa: ARG002
         pass
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
-
-    async def get(self, *args, **kwargs):  # noqa: ARG002
+    def get(self, *args, **kwargs):  # noqa: ARG002
         return None
 
-    async def exec(self, *args, **kwargs):  # noqa: ARG002
+    # SQLModel-style API
+    def exec(self, *args, **kwargs):  # noqa: ARG002
         class _NoopResult:
             def first(self):
                 return None
@@ -70,6 +63,7 @@ class NoopSession:
 
         return _NoopResult()
 
+    # Context manager helpers
     @property
     def no_autoflush(self):
         """Context manager that disables autoflush (no-op implementation)."""

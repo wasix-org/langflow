@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, Params
-from fastapi_pagination.ext.sqlmodel import apaginate
+from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy import delete
 from sqlmodel import col, select
 
@@ -35,7 +35,7 @@ async def get_vertex_builds(flow_id: Annotated[UUID, Query()], session: DbSessio
 async def delete_vertex_builds(flow_id: Annotated[UUID, Query()], session: DbSession) -> None:
     try:
         await delete_vertex_builds_by_flow_id(session, flow_id)
-        await session.commit()
+        session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -52,7 +52,7 @@ async def get_message_sessions(
         if flow_id:
             stmt = stmt.where(MessageTable.flow_id == flow_id)
 
-        session_ids = await session.exec(stmt)
+        session_ids = session.exec(stmt)
         return list(session_ids)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -83,7 +83,7 @@ async def get_messages(
         if order_by:
             col = getattr(MessageTable, order_by).asc()
             stmt = stmt.order_by(col)
-        messages = await session.exec(stmt)
+        messages = session.exec(stmt)
         return [MessageResponse.model_validate(d, from_attributes=True) for d in messages]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -92,8 +92,8 @@ async def get_messages(
 @router.delete("/messages", status_code=204, dependencies=[Depends(get_current_active_user)])
 async def delete_messages(message_ids: list[UUID], session: DbSession) -> None:
     try:
-        await session.exec(delete(MessageTable).where(MessageTable.id.in_(message_ids)))  # type: ignore[attr-defined]
-        await session.commit()
+        session.exec(delete(MessageTable).where(MessageTable.id.in_(message_ids)))  # type: ignore[attr-defined]
+        session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -105,7 +105,7 @@ async def update_message(
     session: DbSession,
 ):
     try:
-        db_message = await session.get(MessageTable, message_id)
+        db_message = session.get(MessageTable, message_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -118,8 +118,8 @@ async def update_message(
             message_dict["edit"] = True
         db_message.sqlmodel_update(message_dict)
         session.add(db_message)
-        await session.commit()
-        await session.refresh(db_message)
+        session.commit()
+        session.refresh(db_message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return db_message
@@ -137,7 +137,7 @@ async def update_session_id(
     try:
         # Get all messages with the old session ID
         stmt = select(MessageTable).where(MessageTable.session_id == old_session_id)
-        messages = (await session.exec(stmt)).all()
+        messages = (session.exec(stmt)).all()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -151,10 +151,10 @@ async def update_session_id(
 
         session.add_all(messages)
 
-        await session.commit()
+        session.commit()
         message_responses = []
         for message in messages:
-            await session.refresh(message)
+            session.refresh(message)
             message_responses.append(MessageResponse.model_validate(message, from_attributes=True))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -168,12 +168,12 @@ async def delete_messages_session(
     session: DbSession,
 ):
     try:
-        await session.exec(
+        session.exec(
             delete(MessageTable)
             .where(col(MessageTable.session_id) == session_id)
             .execution_options(synchronize_session="fetch")
         )
-        await session.commit()
+        session.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -198,6 +198,6 @@ async def get_transactions(
             warnings.filterwarnings(
                 "ignore", category=DeprecationWarning, module=r"fastapi_pagination\.ext\.sqlalchemy"
             )
-            return await apaginate(session, stmt, params=params, transformer=transform_transaction_table)
+            return paginate(session, stmt, params=params, transformer=transform_transaction_table)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

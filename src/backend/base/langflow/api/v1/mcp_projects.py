@@ -25,7 +25,7 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.sse import SseServerTransport
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.orm import Session
 
 from langflow.api.utils import CurrentActiveMCPUser, extract_global_variables_from_headers
 from langflow.api.v1.auth_helpers import handle_auth_settings_update
@@ -58,7 +58,7 @@ router = APIRouter(prefix="/mcp/project", tags=["mcp_projects"])
 
 
 async def verify_project_auth(
-    db: AsyncSession,
+    db: Session,
     project_id: UUID,
     query_param: str,
     header_param: str,
@@ -71,7 +71,7 @@ async def verify_project_auth(
     settings_service = get_settings_service()
     result: ApiKey | User | None
 
-    project = (await db.exec(select(Folder).where(Folder.id == project_id))).first()
+    project = (db.exec(select(Folder).where(Folder.id == project_id))).first()
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -98,7 +98,7 @@ async def verify_project_auth(
 
         # Verify user has access to the project
         project_access = (
-            await db.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == user.id))
+            db.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == user.id))
         ).first()
 
         if not project_access:
@@ -133,9 +133,9 @@ async def verify_project_auth_conditional(
     - MCP Composer enabled + API key auth: Only allow API keys
     - All other cases: Use standard MCP auth (JWT + API keys)
     """
-    async with session_scope() as session:
+    with session_scope() as session:
         # Get project to check auth settings
-        project = (await session.exec(select(Folder).where(Folder.id == project_id))).first()
+        project = (session.exec(select(Folder).where(Folder.id == project_id))).first()
 
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -164,7 +164,7 @@ async def verify_project_auth_conditional(
 
         # Verify project access
         project_access = (
-            await session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == user.id))
+            session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == user.id))
         ).first()
 
         if not project_access:
@@ -201,10 +201,10 @@ async def list_project_tools(
     """List all tools in a project that are enabled for MCP."""
     tools: list[MCPSettings] = []
     try:
-        async with session_scope() as session:
+        with session_scope() as session:
             # Fetch the project first to verify it exists and belongs to the current user
             project = (
-                await session.exec(
+                session.exec(
                     select(Folder)
                     .options(selectinload(Folder.flows))
                     .where(Folder.id == project_id, Folder.user_id == current_user.id)
@@ -221,7 +221,7 @@ async def list_project_tools(
             if mcp_enabled:
                 flows_query = flows_query.where(Flow.mcp_enabled == True)  # noqa: E712
 
-            flows = (await session.exec(flows_query)).all()
+            flows = (session.exec(flows_query)).all()
 
             for flow in flows:
                 if flow.user_id is None:
@@ -286,9 +286,9 @@ async def handle_project_sse(
 ):
     """Handle SSE connections for a specific project."""
     # Verify project exists and user has access
-    async with session_scope() as session:
+    with session_scope() as session:
         project = (
-            await session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
+            session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
         ).first()
 
     if not project:
@@ -385,15 +385,15 @@ async def update_project_mcp_settings(
     the body of the response to display to the user.
     """
     try:
-        async with session_scope() as session:
+        with session_scope() as session:
             # Fetch the project first to verify it exists and belongs to the current user
             project = (
-                await session.exec(
-                    select(Folder)
-                    .options(selectinload(Folder.flows))
-                    .where(Folder.id == project_id, Folder.user_id == current_user.id)
-                )
-            ).first()
+                session.exec(
+                select(Folder)
+                .options(selectinload(Folder.flows))
+                .where(Folder.id == project_id, Folder.user_id == current_user.id)
+            )
+        ).first()
 
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
@@ -417,7 +417,7 @@ async def update_project_mcp_settings(
             session.add(project)
 
             # Query flows in the project
-            flows = (await session.exec(select(Flow).where(Flow.folder_id == project_id))).all()
+            flows = (session.exec(select(Flow).where(Flow.folder_id == project_id))).all()
             flows_to_update = {x.id: x for x in request.settings}
 
             updated_flows = []
@@ -434,7 +434,7 @@ async def update_project_mcp_settings(
                     session.add(flow)
                     updated_flows.append(flow)
 
-            await session.commit()
+            session.commit()
 
             response: dict[str, Any] = {
                 "message": f"Updated MCP settings for {len(updated_flows)} flows and project auth settings"
@@ -647,7 +647,7 @@ async def install_mcp_config(
             # Only add API key headers for projects with "apikey" auth type (not "none" or OAuth)
 
             if should_generate_api_key:
-                async with session_scope() as api_key_session:
+                with session_scope() as api_key_session:
                     api_key_create = ApiKeyCreate(name=f"MCP Server {project.name}")
                     api_key_response = await create_api_key(api_key_session, api_key_create, current_user.id)
                     langflow_api_key = api_key_response.api_key
@@ -791,9 +791,9 @@ async def check_installed_mcp_servers(
     """Check if MCP server configuration is installed for this project in Cursor, Windsurf, or Claude."""
     try:
         # Verify project exists and user has access
-        async with session_scope() as session:
+        with session_scope() as session:
             project = (
-                await session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
+                session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
             ).first()
 
             if not project:
@@ -1134,8 +1134,8 @@ async def init_mcp_servers():
     try:
         settings_service = get_settings_service()
 
-        async with session_scope() as session:
-            projects = (await session.exec(select(Folder))).all()
+        with session_scope() as session:
+            projects = (session.exec(select(Folder))).all()
 
             for project in projects:
                 try:
@@ -1195,7 +1195,7 @@ async def init_mcp_servers():
                     # Continue to next project even if this one fails
 
             # Commit any auth settings updates
-            await session.commit()
+            session.commit()
 
     except Exception as e:  # noqa: BLE001
         msg = f"Failed to initialize MCP servers: {e}"
@@ -1204,9 +1204,9 @@ async def init_mcp_servers():
 
 async def verify_project_access(project_id: UUID, current_user: CurrentActiveMCPUser) -> Folder:
     """Verify project exists and user has access."""
-    async with session_scope() as session:
+    with session_scope() as session:
         project = (
-            await session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
+            session.exec(select(Folder).where(Folder.id == project_id, Folder.user_id == current_user.id))
         ).first()
 
         if not project:
