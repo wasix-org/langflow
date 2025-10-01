@@ -2,7 +2,7 @@
 entrypoint = "start"
 
 [dependencies]
-"python/python" = "3.13.1"
+"zebreus/python-with-libs" = "=0.1.2"
 "wasmer/bash" = "=1.0.24"
 
 [fs]
@@ -11,12 +11,17 @@ entrypoint = "start"
 
 [[command]]
 name = "start"
-module = "python/python:python"
+module = "zebreus/python-with-libs:python"
 runner = "wasi"
 
 [command.annotations.wasi]
 cwd = "/app"
-main-args = ["-c", "from langflow import __main__; __main__.main()"]
+# main-args = ["-c", "from langflow import __main__; __main__.main()"]
+main-args = [
+    "-c",
+    "from langflow import __main__; import sys; sys.argv = ['langflow', 'run', '--log-level', 'debug', '--host', '127.0.0.1', '--port', '9876', '--backend-only']; __main__.main()",
+    # "import os; print(os.listdir('/app/langflow/frontend'))",
+]
 env = [
     "PYTHONEXECUTABLE=/bin/python",
     "PYTHONHOME=/cpython",
