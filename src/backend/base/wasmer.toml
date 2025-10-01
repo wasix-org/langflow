@@ -7,7 +7,7 @@ entrypoint = "start"
 
 [fs]
 "/app" = "."
-"/opt/venv/lib/python3.13/site-packages" = "/Users/syrusakbary/Development/langflow/src/backend/base/wasix-site-packages"
+"/opt/venv/lib/python3.13/site-packages" = "./wasix-site-packages"
 
 [[command]]
 name = "start"
@@ -17,4 +17,9 @@ runner = "wasi"
 [command.annotations.wasi]
 cwd = "/app"
 main-args = ["-c", "from langflow import __main__; __main__.main()"]
-env = ["PYTHONEXECUTABLE=/bin/python", "PYTHONHOME=/cpython", "PYTHONPATH=/opt/venv/lib/python3.13/site-packages", "HOME=/app"]
+env = [
+    "PYTHONEXECUTABLE=/bin/python",
+    "PYTHONHOME=/cpython",
+    "PYTHONPATH=/opt/venv/lib/python3.13/site-packages",
+    "HOME=/app",
+]
