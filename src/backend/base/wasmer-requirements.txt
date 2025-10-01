@@ -3,7 +3,7 @@
 --index-url https://pypi.org/simple
 --extra-index-url https://pythonindex.wasix.org/simple
 
--e file:///Users/syrusakbary/Development/langflow/src/lfx
+-e git+https://github.com/wasix-org/langflow.git#egg=lfx&subdirectory=src/lfx
     # via langflow-base (pyproject.toml)
 aiofile==3.9.0
     # via
@@ -502,3 +502,5 @@ zipp==3.23.0
     # via importlib-metadata
 zstandard==0.25.0
     # via langsmith
+openai
+distro
