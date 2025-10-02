@@ -28,4 +28,6 @@ env = [
     "PYTHONHOME=/cpython",
     "PYTHONPATH=/opt/venv/lib/python3.13/site-packages",
     "HOME=/app",
+    "PASSLIB_BUILTIN_BCRYPT=enable",
+    "LANGFLOW_DATABASE_URL=sqlite:///db.sqlite3",
 ]
