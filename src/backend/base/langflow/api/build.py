@@ -262,7 +262,7 @@ async def generate_flow_events(
             )
 
         if not flow_name:
-            result = await fresh_session.exec(select(Flow.name).where(Flow.id == flow_id))
+            result = fresh_session.exec(select(Flow.name).where(Flow.id == flow_id))
             flow_name = result.first()
 
         return await build_graph_from_data(

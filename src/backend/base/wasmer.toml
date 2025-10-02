@@ -2,7 +2,7 @@
 entrypoint = "start"
 
 [dependencies]
-"zebreus/python-with-libs" = "=0.1.2"
+"zebreus/python-with-libs" = "=0.1.3"
 "wasmer/bash" = "=1.0.24"
 
 [fs]
