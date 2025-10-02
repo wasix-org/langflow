@@ -73,7 +73,7 @@ async def retrieve_vertices_order(
         data (Optional[FlowDataRequest], optional): The flow data. Defaults to None.
         stop_component_id (str, optional): The ID of the stop component. Defaults to None.
         start_component_id (str, optional): The ID of the start component. Defaults to None.
-        session (AsyncSession, optional): The session dependency.
+        session (Session, optional): The session dependency.
 
     Returns:
         VerticesOrderResponse: The response containing the ordered vertex IDs and the run ID.

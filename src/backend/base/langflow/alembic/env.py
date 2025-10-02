@@ -1,11 +1,9 @@
 # noqa: INP001
-import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool, text
+from sqlalchemy import create_engine, pool, text
 from sqlalchemy.event import listen
-from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from langflow.services.database.service import SQLModel
 
@@ -90,24 +88,6 @@ def _do_run_migrations(connection):
         context.run_migrations()
 
 
-async def _run_async_migrations() -> None:
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    if connectable.dialect.name == "sqlite":
-        # See https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#serializable-isolation-savepoints-transactional-ddl
-        listen(connectable.sync_engine, "connect", _sqlite_do_connect)
-        listen(connectable.sync_engine, "begin", _sqlite_do_begin)
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(_do_run_migrations)
-
-    await connectable.dispose()
-
-
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -115,7 +95,19 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    asyncio.run(_run_async_migrations())
+    connectable = create_engine(
+        config.get_main_option("sqlalchemy.url"),
+        poolclass=pool.NullPool,
+    )
+
+    if connectable.dialect.name == "sqlite":
+        # See https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#serializable-isolation-savepoints-transactional-ddl
+        listen(connectable, "connect", _sqlite_do_connect)
+        listen(connectable, "begin", _sqlite_do_begin)
+
+    with connectable.connect() as connection:
+        _do_run_migrations(connection)
+    connectable.dispose()
 
 
 if context.is_offline_mode():
