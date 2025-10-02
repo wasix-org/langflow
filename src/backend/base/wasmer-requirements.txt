@@ -504,3 +504,29 @@ zstandard==0.25.0
     # via langsmith
 openai
 distro
+
+# extra deps arshia suggested
+apify
+astrapy
+beaupy
+bs4
+cohere
+composio
+langchain_anthropic
+langchain_cohere
+langchain_mistralai
+langchain_ollama
+langchain_sambanova
+langchain_unstructured
+litellm
+metaphor_python
+ollama
+pypdf
+pytest
+pytube
+supabase
+toml
+trustcall
+twelvelabs
+weaviate
+yfinance
