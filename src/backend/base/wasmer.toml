@@ -7,6 +7,7 @@ entrypoint = "start"
 
 [fs]
 "/app" = "."
+"/frontend" = "../../frontend/build"
 "/opt/venv/lib/python3.13/site-packages" = "./wasix-site-packages"
 
 [[command]]
@@ -19,7 +20,7 @@ cwd = "/app"
 # main-args = ["-c", "from langflow import __main__; __main__.main()"]
 main-args = [
     "-c",
-    "from langflow import __main__; import sys; sys.argv = ['langflow', 'run', '--log-level', 'debug', '--host', '127.0.0.1', '--port', '9876', '--backend-only']; __main__.main()",
+    "from langflow import __main__; import sys; sys.argv = ['langflow', 'run', '--log-level', 'debug', '--host', '127.0.0.1', '--port', '9876', '--frontend-path', '/frontend']; __main__.main()",
     # "from langflow import __main__; import sys; sys.argv = ['langflow', 'migration']; __main__.main()",
     # "import os; print(os.listdir('/app/langflow/frontend'))",
 ]
