@@ -1,0 +1,35 @@
+[package]
+name = "zebreus/langflow-with-shared-python"
+version = "0.1.0"
+entrypoint = "start"
+
+[dependencies]
+"zebreus/python-with-packages-test" = "=0.1.10"
+"wasmer/bash" = "=1.0.24"
+
+[fs]
+"/app" = "."
+"/frontend" = "../../frontend/build"
+"/usr/local/lib/python3.13/site-packages" = "./wasix-site-packages"
+
+[[command]]
+name = "start"
+module = "zebreus/python-with-packages-test:python"
+runner = "wasi"
+
+[command.annotations.wasi]
+cwd = "/app"
+# main-args = ["-c", "from langflow import __main__; __main__.main()"]
+main-args = [
+    "-c",
+    "import sys; from langflow import __main__; sys.argv = ['langflow', 'run', '--log-level', 'debug', '--host', '127.0.0.1', '--port', '9877', '--frontend-path', '/frontend']; __main__.main()",
+    # "import sys; sys.path = ['', '/usr/local/lib/python3.13/site-packages', '/usr/local/lib/python313.zip', '/usr/local/lib/python3.13', '/usr/local/lib/python3.13/lib-dynload'] ; "
+    # "from langflow import __main__; import sys; sys.argv = ['langflow', 'migration']; __main__.main()",
+    # "import os; print(os.listdir('/app/langflow/frontend'))",
+]
+env = [
+    "HOME=/app",
+    "PASSLIB_BUILTIN_BCRYPT=enable",
+    "LANGFLOW_DATABASE_URL=sqlite:///db.sqlite3",
+    "LANGFLOW_AUTO_LOGIN=True",
+]
