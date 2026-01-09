@@ -338,8 +338,6 @@ def run(
     # Step 3: Connecting Database (this happens inside setup_app via dependencies)
     with progress.step(3):
         # check if port is being used
-        if is_port_in_use(port, host):
-            port = get_free_port(port)
 
         protocol = "https" if ssl_cert_file_path and ssl_key_file_path else "http"
 
