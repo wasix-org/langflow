@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from langchain_chroma import Chroma
+# from langchain_chroma import Chroma
 from lfx.log import logger
 from pydantic import BaseModel
 
@@ -64,7 +64,7 @@ def detect_embedding_provider(kb_path: Path) -> str:
         "HuggingFace": ["sentence-transformers", "huggingface", "bert-"],
         "Cohere": ["cohere", "embed-english", "embed-multilingual"],
         "Google": ["palm", "gecko", "google"],
-        "Chroma": ["chroma"],
+        # "Chroma": ["chroma"],
     }
 
     # Check JSON config files for provider information
@@ -96,8 +96,8 @@ def detect_embedding_provider(kb_path: Path) -> str:
             continue
 
     # Fallback to directory structure
-    if (kb_path / "chroma").exists():
-        return "Chroma"
+    # if (kb_path / "chroma").exists():
+    #     return "Chroma"
     if (kb_path / "vectors.npy").exists():
         return "Local"
 
@@ -246,16 +246,20 @@ def get_kb_metadata(kb_path: Path) -> dict:
                 logger.exception("Error reading schema file '%s'", schema_file)
 
         # Create vector store
-        chroma = Chroma(
-            persist_directory=str(kb_path),
-            collection_name=kb_path.name,
-        )
+        # chroma = Chroma(
+        #     persist_directory=str(kb_path),
+        #     collection_name=kb_path.name,
+        # )
 
         # Access the raw collection
-        collection = chroma._collection
+        # collection = chroma._collection
 
         # Fetch all documents and metadata
-        results = collection.get(include=["documents", "metadatas"])
+        # results = collection.get(include=["documents", "metadatas"])
+        results = {
+            "documents": [],
+            "metadatas": [],
+        }
 
         # Convert to pandas DataFrame
         source_chunks = pd.DataFrame(
